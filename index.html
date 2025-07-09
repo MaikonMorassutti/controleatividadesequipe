@@ -1,0 +1,2601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Indicadores - Processos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .tab-button.active {
+            background-color: #0369a1; /* sky-700 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .status-nao-iniciado { background-color: #3b82f6; color: white; } /* Blue */
+        .status-andamento { background-color: #facc15; color: black; }   /* Yellow */
+        .status-concluido { background-color: #22c55e; color: white; }  /* Green */
+        .status-atrasado { background-color: #ef4444; color: white; }   /* Red */
+        .status-cancelado { background-color: #64748b; color: white; }  /* Slate-500 */
+        .modal {
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.6);
+        }
+        .modal-content {
+            background-color: #ffffff; margin: 10% auto; padding: 24px;
+            border: 1px solid #e2e8f0; width: 90%; max-width: 500px;
+            border-radius: 0.75rem; text-align: center;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+        .close-button {
+            color: #94a3b8; float: right; font-size: 28px; font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #1e293b; text-decoration: none; cursor: pointer;
+        }
+        .toast {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%); padding: 12px 24px;
+            background-color: #1e293b; color: white;
+            border-radius: 0.5rem; z-index: 1001;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            opacity: 0; transition: opacity 0.5s ease-in-out, bottom 0.5s ease-in-out;
+        }
+        .toast.show {
+            opacity: 1; bottom: 30px;
+        }
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
+        }
+        select[multiple] {
+            height: 120px;
+        }
+        @media (min-width: 768px) {
+             .chart-container {
+                 height: 400px;
+             }
+        }
+        input, select {
+             transition: all 0.15s ease-in-out;
+        }
+        .goal-indicator {
+            font-size: 1.5rem; /* Larger emoji */
+            margin-left: 0.5rem;
+            vertical-align: middle;
+            display: inline-block; /* Allows positioning with text */
+        }
+        /* Style for sticky header in competence matrix */
+        #matrizCompetenciasTable th.sticky, #matrizCompetenciasTable td.sticky {
+            position: -webkit-sticky;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+         #matrizCompetenciasTable thead th.sticky {
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div class="container mx-auto p-4 md:p-6 lg:p-8">
+        <header class="bg-gradient-to-br from-sky-600 to-sky-800 text-white p-5 rounded-xl shadow-lg mb-8 flex justify-center items-center">
+            <h1 class="text-3xl font-bold text-center">Controle de Indicadores - Processos</h1>
+        </header>
+
+        <div class="mb-8 bg-white p-3 rounded-xl shadow-md">
+            <nav class="flex flex-wrap space-x-2 sm:space-x-4 justify-center">
+                <button data-tab="dashboard" class="tab-button py-2.5 px-4 bg-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-sky-700 hover:text-white transition-all duration-200 text-sm sm:text-base">Dashboard</button>
+                <button data-tab="gestor" class="tab-button py-2.5 px-4 bg-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-sky-700 hover:text-white transition-all duration-200 text-sm sm:text-base">Gestor</button>
+                <button data-tab="equipe" class="tab-button py-2.5 px-4 bg-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-sky-700 hover:text-white transition-all duration-200 text-sm sm:text-base">Equipe</button>
+            </nav>
+        </div>
+
+        <!-- ABA DASHBOARD -->
+        <div id="dashboard" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                <div class="p-4 bg-white border border-slate-200/80 rounded-xl shadow-sm lg:col-span-2">
+                    <label for="filtroColaboradorGrafico" class="text-lg font-semibold text-slate-800 mb-3">Filtrar Gráficos por:</label>
+                    <select id="filtroColaboradorGrafico" class="mt-1 block w-full md:w-1/2 lg:w-1/3 py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        <option value="todos">Equipe Total</option>
+                    </select>
+                </div>
+
+                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Status das Atividades</h3>
+                    <div class="chart-container">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span>Entregas Mensais no Prazo (%)</span>
+                        <span id="entregaMensalStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                     <div class="chart-container">
+                        <canvas id="entregaMensalChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                     <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span id="avaliacao5sChartTitleText"></span> <!-- Separated span for dynamic text -->
+                        <span id="avaliacao5sStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                    <div class="mb-4">
+                        <label for="filtroSetor5sChart" class="block text-sm font-medium text-slate-600">Filtrar por Setor:</label>
+                        <select id="filtroSetor5sChart" class="mt-1 block w-full md:w-1/2 lg:w-1/3 py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            <option value="todos">Geral (Todos os Setores)</option>
+                        </select>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="avaliacao5sChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                     <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span>Média Mensal Avaliação TPM (Meta: 4.6)</span>
+                        <span id="avaliacaoTpmStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                    <div class="mb-4">
+                        <label for="filtroMaquinaTpmChart" class="block text-sm font-medium text-slate-600">Filtrar por Máquina:</label>
+                        <select id="filtroMaquinaTpmChart" class="mt-1 block w-full md:w-1/2 lg:w-1/3 py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            <option value="todas">Geral (Todas as Máquinas)</option>
+                        </select>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="avaliacaoTpmChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span>ITs Concluídas Acumuladas</span>
+                        <span id="itsConcluidasStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                    <div class="flex flex-wrap gap-4 mb-4">
+                        <div>
+                            <label for="filtroColaboradorItChart" class="block text-sm font-medium text-slate-600">Filtrar por Colaborador:</label>
+                            <select id="filtroColaboradorItChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtroAnoItChart" class="block text-sm font-medium text-slate-600">Filtrar por Ano:</label>
+                            <select id="filtroAnoItChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="itsConcluidasChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span>SAPs Implementadas Acumuladas</span>
+                        <span id="sapsImplementadasStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                     <div class="flex flex-wrap gap-4 mb-4">
+                        <div>
+                            <label for="filtroColaboradorSapChart" class="block text-sm font-medium text-slate-600">Filtrar por Colaborador:</label>
+                            <select id="filtroColaboradorSapChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtroAnoSapChart" class="block text-sm font-medium text-slate-600">Filtrar por Ano:</label>
+                            <select id="filtroAnoSapChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="sapsImplementadasChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3 flex justify-between items-center">
+                        <span>Avaliações de Posto Acumuladas</span>
+                        <span id="avaliacoesPostoStatusIndicator" class="goal-indicator hidden"></span>
+                    </h3>
+                     <div class="flex flex-wrap gap-4 mb-4">
+                        <div>
+                            <label for="filtroColaboradorAvaliacaoPostoChart" class="block text-sm font-medium text-slate-600">Filtrar por Colaborador:</label>
+                            <select id="filtroColaboradorAvaliacaoPostoChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtroAnoAvaliacaoPostoChart" class="block text-sm font-medium text-slate-600">Filtrar por Ano:</label>
+                            <select id="filtroAnoAvaliacaoPostoChart" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="avaliacoesPostoTrabalhoChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2">
+                    <h2 class="text-2xl font-bold text-slate-800 mb-4 text-center">Saving Kaizen (R$)</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div>
+                            <label for="filtroColaboradorKaizen" class="block text-sm font-medium text-slate-600">Colaborador:</label>
+                            <select id="filtroColaboradorKaizen" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtroProjetoKaizen" class="block text-sm font-medium text-slate-600">Projeto Kaizen:</label>
+                            <select id="filtroProjetoKaizen" class="mt-1 block w-full px-3 py-2 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todos">Todos</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label for="filtroMaquinaKaizen" class="block text-sm font-medium text-slate-600">Máquina:</label>
+                            <select id="filtroMaquinaKaizen" class="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="todas">Todas</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtroAnoKaizen" class="block text-sm font-medium text-slate-600">Ano(s): <span class="text-xs">(Ctrl/Cmd)</span></label>
+                            <select id="filtroAnoKaizen" multiple class="mt-1 block w-full px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-8">
+                        <h3 class="text-xl font-bold text-slate-800 mb-3">Evolução Acumulada (Empilhado por Máquina)</h3>
+                        <div class="chart-container">
+                            <canvas id="kaizenMensalChart"></canvas>
+                        </div>
+                    </div>
+                    <hr class="my-8 border-t border-slate-200">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 mb-3">Evolução Acumulada (Empilhado por Projeto)</h3>
+                        <div class="text-center mb-4 p-4 bg-slate-100 rounded-lg">
+                            <span class="text-lg font-bold text-slate-800">Saving Total Acumulado (Filtro):</span>
+                            <span id="totalSavingKaizen" class="text-2xl font-extrabold text-green-600 ml-2">R$ 0,00</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="kaizenChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="matrizCompetenciasContainer" class="bg-white p-4 rounded-xl shadow-sm border border-slate-200/80 lg:col-span-2 mt-6">
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Matriz de Competências por Atividade</h3>
+                    <div class="mb-4">
+                        <label for="filtroColaboradorMatriz" class="block text-sm font-medium text-slate-600">Filtrar por Colaborador:</label>
+                        <select id="filtroColaboradorMatriz" class="mt-1 block w-full md:w-1/2 lg:w-1/3 py-2 px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            <option value="todos">Todos</option>
+                        </select>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table id="matrizCompetenciasTable" class="min-w-full divide-y divide-slate-200 border border-slate-200">
+                        </table>
+                        <p id="nenhumaAtividadeParaMatriz" class="text-center text-slate-500 py-4 hidden">Nenhuma atividade de setor encontrada para exibir a matriz.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA GESTOR -->
+        <div id="gestor" class="tab-content p-4 sm:p-6 bg-white rounded-xl shadow-md border border-slate-200/80">
+            <h2 class="text-2xl font-semibold text-slate-800 mb-6 border-b pb-4">Área do Gestor</h2>
+            <div id="gestorContent" class="space-y-8">
+
+                <div class="p-6 bg-slate-50 rounded-xl shadow-sm border-l-4 border-sky-500">
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Lançar Nova Atividade</h3>
+                    <form id="formNovaAtividade" class="space-y-4">
+                        <div>
+                            <label for="colaboradorNome" class="block text-sm font-medium text-slate-700">Nome do Colaborador:</label>
+                            <input type="text" id="colaboradorNome" name="colaboradorNome" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="descricaoAtividade" class="block text-sm font-medium text-slate-700">Descrição da Atividade:</label>
+                            <textarea id="descricaoAtividade" name="descricaoAtividade" rows="3" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm"></textarea>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="dataInicio" class="block text-sm font-medium text-slate-700">Data de Início (opcional):</label>
+                                <input type="date" id="dataInicio" name="dataInicio" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="dataPrevistaConclusao" class="block text-sm font-medium text-slate-700">Data Prevista para Conclusão:</label>
+                                <input type="date" id="dataPrevistaConclusao" name="dataPrevistaConclusao" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="dataConclusao" class="block text-sm font-medium text-slate-700">Data da Conclusão (opcional):</label>
+                                <input type="date" id="dataConclusao" name="dataConclusao" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="statusAtividade" class="block text-sm font-medium text-slate-700">Status da Atividade:</label>
+                                <select id="statusAtividade" name="statusAtividade" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                    <option value="Não iniciado">Não iniciado</option>
+                                    <option value="Andamento">Andamento</option>
+                                    <option value="Concluído">Concluído</option>
+                                    <option value="Atrasado">Atrasado</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <input type="hidden" id="atividadeId" name="atividadeId">
+                        <button type="submit" class="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Atividade</button>
+                    </form>
+                </div>
+
+                <div class="p-6 bg-slate-50 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Consultar Atividades</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="filtroMesConclusao" class="block text-sm font-medium text-slate-700">Filtrar por Mês de Previsão:</label>
+                            <input type="month" id="filtroMesConclusao" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="filtroColaborador" class="block text-sm font-medium text-slate-700">Filtrar por Colaborador:</label>
+                            <select id="filtroColaborador" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                     <button id="limparFiltros" class="mb-4 py-2 px-4 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-sm transition-all duration-150">Limpar Filtros</button>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Colaborador</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Descrição</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Início</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Prev. Conclusão</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Conclusão</th>
+                                    <th class="px-4 py-3 whitespace-nowrap text-sm text-slate-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listaAtividades" class="bg-white divide-y divide-slate-200">
+                            </tbody>
+                        </table>
+                    </div>
+                     <p id="nenhumaAtividade" class="text-center text-slate-500 py-4 hidden">Nenhuma atividade encontrada.</p>
+                </div>
+
+                <div class="p-6 bg-slate-50 rounded-xl shadow-sm border-l-4 border-orange-500">
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Gerenciar Atividades do Setor</h3>
+                    <form id="formSetorAtividade" class="space-y-4">
+                        <div>
+                            <label for="setorAtividadeDescricao" class="block text-sm font-medium text-slate-700">Atividade do Setor:</label>
+                            <textarea id="setorAtividadeDescricao" name="setorAtividadeDescricao" rows="3" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 sm:text-sm"></textarea>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="setorAtividadeIT" class="block text-sm font-medium text-slate-700">Nº da IT Correlacionada:</label>
+                                <input type="text" id="setorAtividadeIT" name="setorAtividadeIT" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="setorAtividadeUrgencia" class="block text-sm font-medium text-slate-700">Grau de Urgência (1 = menor):</label>
+                                <input type="number" id="setorAtividadeUrgencia" name="setorAtividadeUrgencia" min="1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="setorAtividadeAptos" class="block text-sm font-medium text-slate-700">Colaboradores Aptos: <span class="text-xs">(Ctrl/Cmd para múltiplos)</span></label>
+                            <select id="setorAtividadeAptos" name="setorAtividadeAptos" multiple required class="mt-1 block w-full px-3 border border-slate-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 sm:text-sm">
+                            </select>
+                        </div>
+                        <div>
+                            <label for="setorAtividadeResponsavel" class="block text-sm font-medium text-slate-700">Colaborador Responsável:</label>
+                            <select id="setorAtividadeResponsavel" name="setorAtividadeResponsavel" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 sm:text-sm">
+                            </select>
+                        </div>
+                        <input type="hidden" id="setorAtividadeId" name="setorAtividadeId">
+                        <button type="submit" class="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Atividade do Setor</button>
+                    </form>
+                    <div class="mt-6 overflow-x-auto">
+                        <h4 class="text-md font-semibold text-slate-700 mb-2">Atividades Lançadas:</h4>
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Atividade</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">IT</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Urgência</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Responsável</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listaSetorAtividades" class="bg-white divide-y divide-slate-200">
+                            </tbody>
+                        </table>
+                        <p id="nenhumaSetorAtividadeAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma atividade de setor adicionada ainda.</p>
+                    </div>
+                </div>
+
+                <div class="p-6 bg-slate-50 rounded-xl shadow-sm border-l-4 border-emerald-500">
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Lançar Projeto Kaizen</h3>
+                    <form id="formNovoKaizen" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label for="colaboradorKaizen" class="block text-sm font-medium text-slate-700">Nome do Colaborador:</label>
+                                <input type="text" id="colaboradorKaizen" name="colaboradorKaizen" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="projetoKaizen" class="block text-sm font-medium text-slate-700">Projeto Kaizen:</label>
+                                <input type="text" id="projetoKaizen" name="projetoKaizen" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                            </div>
+                        </div>
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="savingKaizen" class="block text-sm font-medium text-slate-700">Saving (R$):</label>
+                                <input type="number" step="0.01" id="savingKaizen" name="savingKaizen" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="mesAnoKaizen" class="block text-sm font-medium text-slate-700">Mês/Ano:</label>
+                                <input type="month" id="mesAnoKaizen" name="mesAnoKaizen" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="maquinaKaizen" class="block text-sm font-medium text-slate-700">Máquina/Equipamento (Opcional):</label>
+                            <input type="text" id="maquinaKaizen" name="maquinaKaizen" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="Ex: Furadeira de Bancada XYZ">
+                        </div>
+                        <input type="hidden" id="kaizenId" name="kaizenId">
+                        <button type="submit" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Kaizen</button>
+                    </form>
+                    <div class="mt-6 overflow-x-auto">
+                         <h4 class="text-md font-semibold text-slate-700 mb-2">Consultar/Editar Projetos Kaizen</h4>
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label for="filtroMesKaizenGestor" class="block text-sm font-medium text-slate-700">Filtrar por Mês:</label>
+                                <input type="month" id="filtroMesKaizenGestor" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="filtroColaboradorKaizenGestor" class="block text-sm font-medium text-slate-700">Filtrar por Colaborador:</label>
+                                <select id="filtroColaboradorKaizenGestor" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:text-sm">
+                                    <option value="todos">Todos</option>
+                                </select>
+                            </div>
+                         </div>
+                         <button id="limparFiltroKaizenGestor" class="mb-4 py-2 px-4 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-sm transition-all duration-150">Limpar Filtros</button>
+                         <table class="min-w-full divide-y divide-slate-200">
+                             <thead class="bg-slate-100">
+                                 <tr>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Colaborador</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Projeto</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Saving</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Mês/Ano</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Ações</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="listaKaizensGestor" class="bg-white divide-y divide-slate-200">
+                             </tbody>
+                         </table>
+                         <p id="nenhumKaizenGestor" class="text-center text-slate-500 py-3 hidden">Nenhum Kaizen encontrado para os filtros selecionados.</p>
+                    </div>
+                </div>
+
+                <div class="p-6 bg-slate-50 rounded-xl shadow-sm border-l-4 border-purple-500">
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Definir Metas Mensais por Colaborador</h3>
+                    <form id="formDefinirMetas" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label for="metaColaboradorSelect" class="block text-sm font-medium text-slate-700">Colaborador:</label>
+                                <select id="metaColaboradorSelect" name="metaColaboradorSelect" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                                  <option value="">Selecione um colaborador...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="metaMesAno" class="block text-sm font-medium text-slate-700">Mês/Ano:</label>
+                                <input type="month" id="metaMesAno" name="metaMesAno" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            </div>
+                        </div>
+                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label for="metaIts" class="block text-sm font-medium text-slate-700">Meta de ITs:</label>
+                                <input type="number" id="metaIts" name="metaIts" min="0" value="1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="metaSaps" class="block text-sm font-medium text-slate-700">Meta de SAPs:</label>
+                                <input type="number" id="metaSaps" name="metaSaps" min="0" value="1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="metaAvaliacoesPosto" class="block text-sm font-medium text-slate-700">Meta Aval. Posto:</label>
+                                <input type="number" id="metaAvaliacoesPosto" name="metaAvaliacoesPosto" min="0" value="1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <input type="hidden" id="metaId" name="metaId">
+                        <button type="submit" class="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Metas</button>
+                        <button type="button" id="cancelEditMetaButton" class="w-full py-2.5 px-4 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 mt-2 hidden">Cancelar Edição</button>
+                    </form>
+                     <div class="mt-6 overflow-x-auto">
+                         <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas 10 Metas Definidas:</h4>
+                         <table class="min-w-full divide-y divide-slate-200">
+                             <thead class="bg-slate-100">
+                                 <tr>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Colaborador</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Mês/Ano</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">ITs</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">SAPs</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Aval. Posto</th>
+                                     <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Ações</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="listaUltimasMetas" class="bg-white divide-y divide-slate-200">
+                             </tbody>
+                         </table>
+                         <p id="nenhumaMetaDefinida" class="text-center text-slate-500 py-3 hidden">Nenhuma meta definida ainda.</p>
+                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA EQUIPE -->
+        <div id="equipe" class="tab-content p-4 sm:p-6 bg-white rounded-xl shadow-md border border-slate-200/80">
+            <h2 class="text-2xl font-semibold text-slate-800 mb-6 border-b pb-4">Área da Equipe</h2>
+
+            <div class="mt-6 p-6 bg-slate-50 rounded-xl shadow-sm">
+                 <div>
+                    <h3 class="text-xl font-semibold text-slate-700 mb-4">Atualizar Atividade Principal</h3>
+                    <form id="formComplementoEquipe" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="colaboradorEquipeSelect" class="block text-sm font-medium text-slate-700">Selecionar Colaborador:</label>
+                                <select id="colaboradorEquipeSelect" name="colaboradorEquipeSelect" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                    <option value="">Selecione um colaborador...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="filtroMesEquipe" class="block text-sm font-medium text-slate-700">Filtrar Atividades por Mês (Prev. Conclusão):</label>
+                                <input type="month" id="filtroMesEquipe" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="atividadeVinculada" class="block text-sm font-medium text-slate-700">Selecionar Atividade:</label>
+                            <select id="atividadeVinculada" name="atividadeVinculada" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="">Selecione uma atividade...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="dataInicioRealEquipe" class="block text-sm font-medium text-slate-700">Data de início:</label>
+                            <input type="date" id="dataInicioRealEquipe" name="dataInicioRealEquipe" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="dataConclusaoEquipe" class="block text-sm font-medium text-slate-700">Data da Conclusão (opcional):</label>
+                            <input type="date" id="dataConclusaoEquipe" name="dataConclusaoEquipe" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="statusAtividadeEquipe" class="block text-sm font-medium text-slate-700">Status da Atividade:</label>
+                            <select id="statusAtividadeEquipe" name="statusAtividadeEquipe" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                                <option value="Não iniciado">Não iniciado</option>
+                                <option value="Andamento">Andamento</option>
+                                <option value="Concluído">Concluído</option>
+                                <option value="Atrasado">Atrasado</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Atualizações da Atividade</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4">Consultar Atividades da Equipe</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="filtroMesConsultaEquipe" class="block text-sm font-medium text-slate-700">Filtrar por Mês de Previsão:</label>
+                        <input type="month" id="filtroMesConsultaEquipe" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="filtroColaboradorConsultaEquipe" class="block text-sm font-medium text-slate-700">Filtrar por Colaborador:</label>
+                        <select id="filtroColaboradorConsultaEquipe" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="limparFiltrosEquipe" class="mb-4 py-2 px-4 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-sm transition duration-150">Limpar Filtros</button>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-100">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Colaborador</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Descrição</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Início</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Prev. Conclusão</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Conclusão</th>
+                                <th class="px-4 py-3 whitespace-nowrap text-sm text-slate-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaAtividadesEquipe" class="bg-white divide-y divide-slate-200">
+                        </tbody>
+                    </table>
+                </div>
+                <p id="nenhumaAtividadeEquipe" class="text-center text-slate-500 py-4 hidden">Nenhuma atividade encontrada.</p>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4">Lançar Avaliação 5S</h3>
+                <form id="formAvaliacao5s" class="space-y-4">
+                    <div>
+                        <label for="setorAvaliado5s" class="block text-sm font-medium text-slate-700">Setor Avaliado:</label>
+                        <select id="setorAvaliado5s" name="setorAvaliado5s" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 sm:text-sm">
+                            <option value="">Selecione um setor...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="dataAvaliacao5s" class="block text-sm font-medium text-slate-700">Data da Avaliação:</label>
+                        <input type="date" id="dataAvaliacao5s" name="dataAvaliacao5s" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 sm:text-sm">
+                    </div>
+                    <p class="text-sm font-medium text-slate-700">Notas (0 a 5 para cada 'S'):</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div>
+                            <label for="notaS1" class="block text-xs font-medium text-slate-600">Utilização (Seiri):</label>
+                            <input type="number" id="notaS1" name="notaS1" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaS2" class="block text-xs font-medium text-slate-600">Organização (Seiton):</label>
+                            <input type="number" id="notaS2" name="notaS2" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaS3" class="block text-xs font-medium text-slate-600">Limpeza (Seiso):</label>
+                            <input type="number" id="notaS3" name="notaS3" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaS4" class="block text-xs font-medium text-slate-600">Padronização (Seiketsu):</label>
+                            <input type="number" id="notaS4" name="notaS4" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaS5" class="block text-xs font-medium text-slate-600">Disciplina (Shitsuke):</label>
+                            <input type="number" id="notaS5" name="notaS5" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Avaliação 5S</button>
+                </form>
+                <div class="mt-6 overflow-x-auto">
+                     <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas Avaliações 5S Lançadas:</h4>
+                     <table class="min-w-full divide-y divide-slate-200">
+                         <thead class="bg-slate-100">
+                             <tr>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Setor</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Data</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Média</th>
+                             </tr>
+                         </thead>
+                         <tbody id="listaUltimasAvaliacoes5S" class="bg-white divide-y divide-slate-200">
+                         </tbody>
+                     </table>
+                     <p id="nenhumaAvaliacao5sAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma avaliação 5S adicionada ainda.</p>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4">Lançar Avaliação TPM</h3>
+                <form id="formAvaliacaoTpm" class="space-y-4">
+                    <div>
+                        <label for="maquinaAvaliadaTpm" class="block text-sm font-medium text-slate-700">Máquina Avaliada:</label>
+                        <select id="maquinaAvaliadaTpm" name="maquinaAvaliadaTpm" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                            <option value="">Selecione uma máquina...</option>
+                            </select>
+                    </div>
+                    <div>
+                        <label for="dataAvaliacaoTpm" class="block text-sm font-medium text-slate-700">Data da Avaliação:</label>
+                        <input type="date" id="dataAvaliacaoTpm" name="dataAvaliacaoTpm" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                    </div>
+                    <p class="text-sm font-medium text-slate-700">Notas (0 a 5 para cada item):</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div>
+                            <label for="notaTpmLimpeza" class="block text-xs font-medium text-slate-600">Limpeza:</label>
+                            <input type="number" id="notaTpmLimpeza" name="notaTpmLimpeza" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaTpmOrganizacao" class="block text-xs font-medium text-slate-600">Organização:</label>
+                            <input type="number" id="notaTpmOrganizacao" name="notaTpmOrganizacao" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaTpmControle" class="block text-xs font-medium text-slate-600">Controle:</label>
+                            <input type="number" id="notaTpmControle" name="notaTpmControle" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaTpmEngajamento" class="block text-xs font-medium text-slate-600">Engajamento:</label>
+                            <input type="number" id="notaTpmEngajamento" name="notaTpmEngajamento" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="notaTpmPercepcao" class="block text-xs font-medium text-slate-600">Percepção:</label>
+                            <input type="number" id="notaTpmPercepcao" name="notaTpmPercepcao" min="0" max="5" step="0.1" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm sm:text-sm">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Avaliação TPM</button>
+                </form>
+                <div class="mt-6 overflow-x-auto">
+                     <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas Avaliações TPM Lançadas:</h4>
+                     <table class="min-w-full divide-y divide-slate-200">
+                         <thead class="bg-slate-100">
+                             <tr>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Máquina</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Data</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Média</th>
+                             </tr>
+                         </thead>
+                         <tbody id="listaUltimasAvaliacoesTpm" class="bg-white divide-y divide-slate-200">
+                         </tbody>
+                     </table>
+                     <p id="nenhumaAvaliacaoTpmAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma avaliação TPM adicionada ainda.</p>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4 flex justify-between items-center">
+                    <span>Lançar IT Concluída</span>
+                    <span id="itsFormStatusIndicator" class="goal-indicator hidden"></span>
+                </h3>
+                <form id="formNovaItConcluida" class="space-y-4">
+                    <div>
+                        <label for="colaboradorIt" class="block text-sm font-medium text-slate-700">Colaborador:</label>
+                        <select id="colaboradorIt" name="colaboradorIt" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            <option value="">Selecione um colaborador...</option>
+                            </select>
+                    </div>
+                    <div>
+                        <label for="nomeIt" class="block text-sm font-medium text-slate-700">Nome/Código da IT:</label>
+                        <input type="text" id="nomeIt" name="nomeIt" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm" placeholder="Ex: IT-001 - Procedimento X">
+                    </div>
+                    <div>
+                        <label for="dataConclusaoIt" class="block text-sm font-medium text-slate-700">Data de Conclusão da IT:</label>
+                        <input type="date" id="dataConclusaoIt" name="dataConclusaoIt" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                    </div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar IT Concluída</button>
+                </form>
+                <div class="mt-6 overflow-x-auto">
+                     <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas ITs Concluídas Lançadas:</h4>
+                     <table class="min-w-full divide-y divide-slate-200">
+                         <thead class="bg-slate-100">
+                             <tr>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Colaborador</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nome da IT</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Data Conclusão</th>
+                             </tr>
+                         </thead>
+                         <tbody id="listaUltimasItsConcluidas" class="bg-white divide-y divide-slate-200">
+                         </tbody>
+                     </table>
+                     <p id="nenhumaItConcluidaAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma IT concluída adicionada ainda.</p>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4 flex justify-between items-center">
+                    <span>Lançar SAP Implementada</span>
+                    <span id="sapsFormStatusIndicator" class="goal-indicator hidden"></span>
+                </h3>
+                <form id="formNovaSapImplementada" class="space-y-4">
+                    <div>
+                        <label for="colaboradorSap" class="block text-sm font-medium text-slate-700">Colaborador:</label>
+                        <select id="colaboradorSap" name="colaboradorSap" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="">Selecione um colaborador...</option>
+                            </select>
+                    </div>
+                    <div>
+                        <label for="nomeSap" class="block text-sm font-medium text-slate-700">Nome/Código da SAP:</label>
+                        <input type="text" id="nomeSap" name="nomeSap" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Ex: SAP-001 - Melhoria Y">
+                    </div>
+                    <div>
+                        <label for="dataConclusaoSap" class="block text-sm font-medium text-slate-700">Data de Implementação da SAP:</label>
+                        <input type="date" id="dataConclusaoSap" name="dataConclusaoSap" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar SAP Implementada</button>
+                </form>
+                <div class="mt-6 overflow-x-auto">
+                     <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas SAPs Implementadas Lançadas:</h4>
+                     <table class="min-w-full divide-y divide-slate-200">
+                         <thead class="bg-slate-100">
+                             <tr>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Colaborador</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nome da SAP</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Data Implementação</th>
+                             </tr>
+                         </thead>
+                         <tbody id="listaUltimasSapsImplementadas" class="bg-white divide-y divide-slate-200">
+                         </tbody>
+                     </table>
+                     <p id="nenhumaSapImplementadaAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma SAP implementada adicionada ainda.</p>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-200 p-6 bg-slate-50 rounded-xl shadow-sm">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4 flex justify-between items-center">
+                    <span>Lançar Avaliação do Posto de Trabalho</span>
+                    <span id="avaliacoesPostoFormStatusIndicator" class="goal-indicator hidden"></span>
+                </h3>
+                <form id="formNovaAvaliacaoPosto" class="space-y-4">
+                    <div>
+                        <label for="colaboradorAvaliacaoPosto" class="block text-sm font-medium text-slate-700">Colaborador:</label>
+                        <select id="colaboradorAvaliacaoPosto" name="colaboradorAvaliacaoPosto" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Selecione um colaborador...</option>
+                            </select>
+                    </div>
+                    <div>
+                        <label for="nomePostoTrabalho" class="block text-sm font-medium text-slate-700">Nome/Identificação do Posto:</label>
+                        <input type="text" id="nomePostoTrabalho" name="nomePostoTrabalho" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Ex: Posto Montagem X / Operador Y">
+                    </div>
+                    <div>
+                        <label for="dataAvaliacaoPosto" class="block text-sm font-medium text-slate-700">Data da Avaliação:</label>
+                        <input type="date" id="dataAvaliacaoPosto" name="dataAvaliacaoPosto" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-all duration-150 transform hover:scale-[1.02]">Salvar Avaliação do Posto</button>
+                </form>
+                <div class="mt-6 overflow-x-auto">
+                     <h4 class="text-md font-semibold text-slate-700 mb-2">Últimas Avaliações de Posto Lançadas:</h4>
+                     <table class="min-w-full divide-y divide-slate-200">
+                         <thead class="bg-slate-100">
+                             <tr>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Colaborador</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Posto de Trabalho</th>
+                                 <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Data Avaliação</th>
+                             </tr>
+                         </thead>
+                         <tbody id="listaUltimasAvaliacoesPosto" class="bg-white divide-y divide-slate-200">
+                         </tbody>
+                     </table>
+                     <p id="nenhumaAvaliacaoPostoAdicionada" class="text-center text-slate-500 py-3 hidden">Nenhuma avaliação de posto adicionada ainda.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="toast">Mensagem do Toast</div>
+
+    <script type="module">
+        // Importações do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            doc,
+            setDoc,
+            updateDoc,
+            deleteDoc,
+            query,
+            onSnapshot,
+            Timestamp
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // #############################################################################
+        // ## IMPORTANTE: COLE SEU OBJETO DE CONFIGURAÇÃO DO FIREBASE AQUI             ##
+        // ## Você pode obter este objeto no console do seu projeto Firebase.         ##
+        // #############################################################################
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_AUTH_DOMAIN",
+            projectId: "SEU_PROJECT_ID",
+            storageBucket: "SEU_STORAGE_BUCKET",
+            messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+            appId: "SUA_APP_ID"
+        };
+        // #############################################################################
+
+        // Firebase services
+        let app;
+        let db;
+        let appInitialized = false;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Data arrays
+        let todasAtividadesGestor = [];
+        let todasSetorAtividades = [];
+        let todasAvaliacoes5S = [];
+        let todasAvaliacoesTpm = [];
+        let todasItsConcluidas = [];
+        let todasSapsImplementadas = [];
+        let todasAvaliacoesPostoTrabalho = [];
+        let todasKaizens = [];
+        let todasMetas = [];
+
+        // Chart instances
+        let statusChartInstance = null;
+        let entregaMensalChartInstance = null;
+        let avaliacao5sChartInstance = null;
+        let avaliacaoTpmChartInstance = null;
+        let itsConcluidasChartInstance = null;
+        let sapsImplementadasChartInstance = null;
+        let avaliacoesPostoTrabalhoChartInstance = null;
+        let kaizenChartInstance = null;
+        let kaizenMensalChartInstance = null;
+
+        // Unsubscribe functions for listeners
+        let unsubscribeFunctions = [];
+
+        // --- Constantes e Variáveis de Metas e Listas ---
+        const META_5S = 4;
+        const setores5S = ["Automação", "Brasagem coletores", "Carenagem", "Montagem caixinhas", "Compressor", "Montagem condensador", "Co2/Chiller", "Montagem Ecopack", "Engenharia", "Estanqueidade", "Expedição", "Isolamento", "Linha de montagem 01", "Linha de montagem 02", "Montagem quadros 01", "Montagem quadros 02", "Montagem quadro de linhas", "Pintura", "Preparação quadros", "Preparação linha", "Serralheria", "Teste elétrico", "Ventiladores"];
+
+        const META_TPM = 4.6;
+        const maquinasTPM = ["TPM0001 - MÁQUINA DE SOLDA MIG/MAG 1", "TPM0002 - FURADEIRA DE BANCADA SCHULTZ FSB 16 TORK", "TPM0003 - FURADEIRA DE COLUNA FERRARI", "TPM0004 - SERRA FITA RONEMAK SR-300VF", "TPM0005 - PLASMA HYPERTHERM POWERMAX 85", "TPM0006 - DOBRADEIRA DE TUBO MANUAL", "TPM0007 - DOBRADEIRA DE TUBO HIDRÁULICA", "TPM0008 - CARRINHO PNEUMÁTICO RACKS N°1", "TPM0009 - SERRA DE DISCO  - CORTESA SC400MPI", "TPM0010 - RETIFICADORA INTERNA DE TUBOS - Pferd Mammut 669-3", "TPM0011 - DOBRADEIRA DE ACRÍLICO - Acryflon", "TPM0012 -DOBRADEIRA DE BARRAMENTO - SKAY", "TPM0013 - MÁQUINA DE PRENSAR TERMINAIS - MHP MPT 40E", "TPM0014 - CORTADOR DE CANALETA – PPS CD M Phoenix Contact", "TPM0015 -Cortador de Trilhos de Fixação - PPS BASIC I/M", "TPM0016 - MÁQUINA DE SOLDA TIG 200P DIGITAL", "TPM0017 - SERRA DE DISCO - CORTESA 1", "TPM0018 - ASPIRADOR  - JACTO CLEAN", "TPM0019 - SARAMAX", "TPM0020 - FURADEIRA DE COLUNA SCHULTZ FSC 25", "TPM0021 -  SERRA FITA HORIZONTAL - STARRETT", "TPM0022 - FURADEIRA DE COLUNA SCHULTZ FSC 25", "TPM0023 - MÁQUINA DE SOLDA MIG/MAG 2", "TPM0024 - CORTE AUTOMÁTICO DE CABOS ", "TPM0025 - DETECTOR DE CO2 1", "TPM0026 - DETECTOR DE CO2 2", "TPM0028 - PLATAFORMA N°01", "TPM0029 - PLATAFORMA N°02", "TPM0030 -  MÁQUINA DE DECAPAGEM E CRIMPAGEM - CF 3000 - 2,5", "TPM0031 - CARRINHO PNEUMÁTICO RACKS N°2", "TPM0032 - PONTE ROLANTE", "TPM0033 - ASPIRADOR WAP GTW INOX", "TPM0034 -  MÁQUINA DE DECAPAGEM E CRIMPAGEM - CF 3000 - 2,5", "TPM0035 -  MÁQUINA DE DECAPAGEM E CRIMPAGEM - CF 3000 - 2,5", "TPM0036 -  TALHA", "TPM0037 -  TALHA", "TPM0038 -  TALHA", "TPM0039 -  TALHA", "TPM0040 -  ESMERIL", "TPM0041 -  ESMERIL", "TPM0042 -  ESMERIL", "TPM0043 - MÁQUINA DE SOLDA MIG/MAG 1", "TPM0044 - MÁQUINA DE SOLDA MIG/MAG 1", "TPM0045 - MÁQUINA DE SOLDA MIG/MAG 1", "TPM0046 - MÁQUINA DE SOLDA MIG/MAG 1", "TPM0047 -  TERMOFUSORA", "TPM0048 -  TERMOFUSORA", "TPM0049 -  TALHA", "TPM0050 -  TALHA", "TPM0051 -  ESCADAS", "TPM0052 -  DROBRADORA DE TUBOS"];
+
+        // --- Elementos do DOM ---
+        const formNovoKaizen = document.getElementById('formNovoKaizen');
+        const listaKaizensGestorEl = document.getElementById('listaKaizensGestor');
+        const nenhumKaizenGestorEl = document.getElementById('nenhumKaizenGestor');
+        const filtroColaboradorKaizenSelect = document.getElementById('filtroColaboradorKaizen');
+        const filtroProjetoKaizenSelect = document.getElementById('filtroProjetoKaizen');
+        const filtroMaquinaKaizenSelect = document.getElementById('filtroMaquinaKaizen');
+        const filtroAnoKaizenSelect = document.getElementById('filtroAnoKaizen');
+        const totalSavingKaizenEl = document.getElementById('totalSavingKaizen');
+        const formNovaAtividade = document.getElementById('formNovaAtividade');
+        const listaAtividadesEl = document.getElementById('listaAtividades');
+        const nenhumaAtividadeEl = document.getElementById('nenhumaAtividade');
+        const filtroMesConclusao = document.getElementById('filtroMesConclusao');
+        const filtroColaborador = document.getElementById('filtroColaborador');
+        const limparFiltrosButton = document.getElementById('limparFiltros');
+        const listaAtividadesEquipeEl = document.getElementById('listaAtividadesEquipe');
+        const nenhumaAtividadeEquipeEl = document.getElementById('nenhumaAtividadeEquipe');
+        const formDefinirMetas = document.getElementById('formDefinirMetas');
+        const listaUltimasMetasEl = document.getElementById('listaUltimasMetas');
+        const nenhumaMetaDefinidaEl = document.getElementById('nenhumaMetaDefinida');
+        const cancelEditMetaButton = document.getElementById('cancelEditMetaButton');
+        const formSetorAtividade = document.getElementById('formSetorAtividade');
+        const listaSetorAtividadesEl = document.getElementById('listaSetorAtividades');
+        const nenhumaSetorAtividadeAdicionadaEl = document.getElementById('nenhumaSetorAtividadeAdicionada');
+        const matrizCompetenciasTableEl = document.getElementById('matrizCompetenciasTable');
+        const nenhumaAtividadeParaMatrizEl = document.getElementById('nenhumaAtividadeParaMatriz');
+        const filtroColaboradorMatrizSelect = document.getElementById('filtroColaboradorMatriz');
+        const filtroMesKaizenGestor = document.getElementById('filtroMesKaizenGestor');
+        const filtroColaboradorKaizenGestor = document.getElementById('filtroColaboradorKaizenGestor');
+        const limparFiltroKaizenGestorBtn = document.getElementById('limparFiltroKaizenGestor');
+
+        // --- Inicialização do Firebase ---
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            console.log("Firebase inicializado com sucesso.");
+            initializeAppLogic();
+        } catch (error) {
+            console.error("Erro ao inicializar Firebase:", error);
+            showToast("Erro crítico: Não foi possível conectar ao Firebase.", true);
+        }
+
+        // --- Lógica de Navegação ---
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        function initializeAppLogic() {
+            if (appInitialized) return;
+            appInitialized = true;
+            console.log("Iniciando a lógica da aplicação.");
+            initializeAllListeners();
+            document.querySelector('.tab-button[data-tab="dashboard"]').click();
+        }
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+
+                tabContents.forEach(content => content.classList.remove('active'));
+                document.getElementById(targetTab).classList.add('active');
+
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                if(targetTab === 'dashboard') {
+                    updateAllDashboardCharts();
+                }
+            });
+        });
+
+        // --- FUNÇÕES DE SINCRONIZAÇÃO E UI ---
+        function initializeAllListeners() {
+            if (!db) return;
+
+            const dataCollections = {
+                'atividades_gestor': (data) => { todasAtividadesGestor = data; },
+                'setor_atividades': (data) => { todasSetorAtividades = data; },
+                'kaizens': (data) => { todasKaizens = data; },
+                'avaliacoes_5s': (data) => { todasAvaliacoes5S = data; },
+                'avaliacoes_tpm': (data) => { todasAvaliacoesTpm = data; },
+                'its_concluidas': (data) => { todasItsConcluidas = data; },
+                'saps_implementadas': (data) => { todasSapsImplementadas = data; },
+                'avaliacoes_posto_trabalho': (data) => { todasAvaliacoesPostoTrabalho = data; },
+                'metas_colaboradores': (data) => { todasMetas = data; }
+            };
+
+            unsubscribeAllListeners();
+            for (const [collectionName, handler] of Object.entries(dataCollections)) {
+                const collectionPath = getSharedCollectionPath(collectionName);
+                if (collectionPath) {
+                    const q = query(collection(db, collectionPath));
+                    const unsubscribe = onSnapshot(q, (snapshot) => {
+                        console.log(`Dados recebidos de: ${collectionName}`);
+                        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        handler(data);
+                        refreshUI();
+                    }, (error) => {
+                        console.error(`Erro ao escutar ${collectionName}:`, error);
+                        showToast(`Erro ao carregar dados de ${collectionName}.`, true);
+                    });
+                    unsubscribeFunctions.push(unsubscribe);
+                }
+            }
+        }
+
+        function unsubscribeAllListeners() {
+            console.log(`Desinscrevendo ${unsubscribeFunctions.length} listeners.`);
+            unsubscribeFunctions.forEach(unsub => unsub());
+            unsubscribeFunctions = [];
+        }
+
+        function refreshUI() {
+            console.log("Atualizando UI...");
+            populateAllFilters();
+            renderAllTables();
+            updateAllDashboardCharts();
+            populateAtividadesParaEquipe();
+            loadAtividadesConsultaEquipe();
+            renderAllUltimosLancamentos();
+        }
+        function renderAllUltimosLancamentos() {
+            renderUltimasAvaliacoes5S(todasAvaliacoes5S);
+            renderUltimasAvaliacoesTpm(todasAvaliacoesTpm);
+            renderUltimasItsConcluidas(todasItsConcluidas);
+            renderUltimasSapsImplementadas(todasSapsImplementadas);
+            renderUltimasAvaliacoesPosto(todasAvaliacoesPostoTrabalho);
+        }
+        function populateAllFilters() {
+            const todosColaboradores = [...new Set([
+                ...todasAtividadesGestor.map(a => a.colaboradorNome),
+                ...todasSetorAtividades.flatMap(a => [a.colaboradorResponsavel, ...a.colaboradoresAptos]),
+                ...todasKaizens.map(k => k.colaboradorNome),
+                ...todasItsConcluidas.map(i => i.colaboradorNome),
+                ...todasSapsImplementadas.map(s => s.colaboradorNome),
+                ...todasAvaliacoesPostoTrabalho.map(p => p.colaboradorNome),
+                ...todasMetas.map(m => m.colaboradorNome)
+            ])].filter(Boolean).sort();
+
+            const maquinasKaizenUnicas = [...new Set(todasKaizens.map(k => k.maquinaKaizen))].filter(Boolean).sort();
+            populateSelectWithOptions('filtroColaboradorGrafico', todosColaboradores, 'Equipe Total', 'todos');
+            populateSelectWithOptions('filtroColaborador', todosColaboradores, 'Todos', '');
+            populateSelectWithOptions('filtroColaboradorItChart', todosColaboradores, 'Todos', 'todos');
+            populateSelectWithOptions('filtroColaboradorSapChart', todosColaboradores, 'Todos', 'todos');
+            populateSelectWithOptions('filtroColaboradorAvaliacaoPostoChart', todosColaboradores, 'Todos', 'todos');
+            populateSelectWithOptions('setorAtividadeAptos', todosColaboradores, '', '');
+            populateSelectWithOptions('setorAtividadeResponsavel', todosColaboradores, 'Selecione...', '');
+            populateSelectWithOptions('filtroColaboradorMatriz', todosColaboradores, 'Todos', 'todos');
+            populateSelectWithOptions('filtroColaboradorKaizenGestor', todosColaboradores, 'Todos', 'todos');
+            const anosIts = [...new Set(todasItsConcluidas.map(it => it.mesAnoConclusao?.substring(0,4)))].filter(Boolean).sort((a,b) => b-a);
+            populateSelectWithOptions('filtroAnoItChart', anosIts, 'Todos', 'todos');
+            const anosSaps = [...new Set(todasSapsImplementadas.map(sap => sap.mesAnoConclusao?.substring(0,4)))].filter(Boolean).sort((a,b) => b-a);
+            populateSelectWithOptions('filtroAnoSapChart', anosSaps, 'Todos', 'todos');
+            const anosAval = [...new Set(todasAvaliacoesPostoTrabalho.map(av => av.mesAnoAvaliacao?.substring(0,4)))].filter(Boolean).sort((a,b) => b-a);
+            populateSelectWithOptions('filtroAnoAvaliacaoPostoChart', anosAval, 'Todos', 'todos');
+            populateSelectWithOptions('colaboradorEquipeSelect', todosColaboradores, 'Selecione um colaborador...', '');
+            populateSelectWithOptions('filtroColaboradorConsultaEquipe', todosColaboradores, 'Todos', '');
+            populateSelectWithOptions('colaboradorIt', todosColaboradores, 'Selecione um colaborador...', '');
+            populateSelectWithOptions('colaboradorSap', todosColaboradores, 'Selecione um colaborador...', '');
+            populateSelectWithOptions('colaboradorAvaliacaoPosto', todosColaboradores, 'Selecione um colaborador...', '');
+            populateSelectWithOptions('metaColaboradorSelect', todosColaboradores, 'Selecione um colaborador...', '');
+            populateSelectWithOptions('filtroSetor5sChart', setores5S.sort(), 'Geral (Todos os Setores)', 'todos');
+            populateSelectWithOptions('maquinaAvaliadaTpm', maquinasTPM.sort(), 'Selecione uma máquina...', '');
+            populateSelectWithOptions('filtroMaquinaTpmChart', maquinasTPM.sort(), 'Geral (Todas as Máquinas)', 'todas');
+            populateSelectWithOptions('setorAvaliado5s', setores5S.sort(), 'Selecione um setor...', '');
+            populateSelectWithOptions('filtroMaquinaKaizen', maquinasKaizenUnicas, 'Todas', 'todas');
+            populateKaizenFilters();
+        }
+        function renderAllTables() {
+            const atividadesFiltradas = todasAtividadesGestor.filter(a => {
+                const mesOk = !filtroMesConclusao.value || a.mesAnoPrevistoConclusao === filtroMesConclusao.value;
+                const colabOk = !filtroColaborador.value || a.colaboradorNome === filtroColaborador.value;
+                return mesOk && colabOk;
+            }).sort((a,b) => (a.dataPrevistaConclusao?.toDate() || 0) - (b.dataPrevistaConclusao?.toDate() || 0));
+            renderAtividades(atividadesFiltradas);
+            renderKaizensGestor();
+            renderUltimasMetas(todasMetas.sort((a, b) => b.mesAno.localeCompare(a.mesAno)));
+            renderSetorAtividadesTable(todasSetorAtividades);
+        }
+
+        function updateAllDashboardCharts() {
+            if (typeof Chart === 'undefined') return;
+
+            let atividadesParaGraficos = todasAtividadesGestor;
+            const filtroColaboradorGrafico = document.getElementById('filtroColaboradorGrafico')?.value || 'todos';
+            if (filtroColaboradorGrafico !== 'todos') {
+                atividadesParaGraficos = todasAtividadesGestor.filter(a => a.colaboradorNome === filtroColaboradorGrafico);
+            }
+            renderStatusChart(atividadesParaGraficos);
+            renderEntregaMensalChart(atividadesParaGraficos);
+            renderAvaliacao5sChart();
+            renderAvaliacaoTpmChart();
+            renderItsConcluidasChart();
+            renderSapsImplementadasChart();
+            renderAvaliacoesPostoTrabalhoChart();
+            renderKaizenCharts();
+            renderMatrizCompetencias(todasSetorAtividades);
+        }
+        // --- Funções Utilitárias ---
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toastNotification');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            toast.style.backgroundColor = isError ? '#ef4444' : '#22c55e';
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+        function formatFirebaseDate(timestamp, toDDMMYYYY = false) {
+            if (!timestamp || typeof timestamp.toDate !== 'function') return '';
+            const date = timestamp.toDate();
+            const year = date.getUTCFullYear();
+            const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+            const day = date.getUTCDate().toString().padStart(2, '0');
+            return toDDMMYYYY ? `${day}/${month}/${year}` : `${year}-${month}-${day}`;
+        }
+        function formatMonthYear(dateString) {
+             if(!dateString || dateString.length !== 7) return '';
+            const [year, month] = dateString.split('-');
+            return `${month}/${year}`;
+        }
+        function formatCurrency(value) {
+             if (typeof value !== 'number') { return 'R$ 0,00'; }
+            return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+        function getStatusClass(status) {
+             const classes = {
+                'Não iniciado': 'status-nao-iniciado', 'Andamento': 'status-andamento',
+                'Concluído': 'status-concluido', 'Atrasado': 'status-atrasado',
+                'Cancelado': 'status-cancelado'
+            };
+            return classes[status] || 'bg-gray-200 text-gray-800';
+        }
+        function getSharedCollectionPath(dataType) {
+            if (!appId) {
+                console.error("appId não definido para getSharedCollectionPath");
+                showToast("Erro de configuração: ID da aplicação não encontrado.", true);
+                return null;
+            }
+            return `dashboard_data/${appId}/${dataType}`;
+        }
+        function showConfirmationModal(message) {
+            return new Promise((resolve) => {
+                const modalId = 'customConfirmModal';
+                let existingModal = document.getElementById(modalId);
+                if (existingModal) existingModal.remove();
+                const modalElement = document.createElement('div');
+                modalElement.id = modalId;
+                modalElement.className = 'modal';
+                modalElement.style.display = 'block';
+                modalElement.innerHTML = `<div class="modal-content"><h3 class="text-lg font-semibold mb-3">Confirmação</h3><p class="mb-5 text-sm text-slate-700">${message}</p><div class="flex justify-end space-x-3"><button id="confirmCancelBtn" class="py-2 px-4 bg-slate-300 text-slate-700 rounded-lg hover:bg-slate-400 transition duration-150">Cancelar</button><button id="confirmOkBtn" class="py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-150">Confirmar</button></div></div>`;
+                document.body.appendChild(modalElement);
+                document.getElementById('confirmOkBtn').onclick = () => { modalElement.remove(); resolve(true); };
+                document.getElementById('confirmCancelBtn').onclick = () => { modalElement.remove(); resolve(false); };
+            });
+        }
+        function populateSelectWithOptions(selectId, optionsArray, defaultText, defaultValue) {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            const selectedValues = select.multiple ? Array.from(select.selectedOptions).map(opt => opt.value) : [select.value];
+            select.innerHTML = '';
+            if (defaultText) {
+                 select.add(new Option(defaultText, defaultValue));
+            }
+            optionsArray.forEach(opt => select.add(new Option(opt, opt)));
+            if (select.multiple) {
+                Array.from(select.options).forEach(opt => {
+                    if(selectedValues.includes(opt.value)) {
+                        opt.selected = true;
+                    }
+                });
+            } else {
+                 if (selectedValues.length > 0 && [...select.options].some(opt => opt.value === selectedValues[0])) {
+                    select.value = selectedValues[0];
+                } else if (defaultText) {
+                    select.value = defaultValue;
+                }
+            }
+        }
+        function updateChartGoalIndicator(indicatorId, isGoalMet) {
+            const indicatorEl = document.getElementById(indicatorId);
+            if (!indicatorEl) return;
+            indicatorEl.classList.remove('text-green-600', 'text-red-600', 'hidden');
+            if (isGoalMet === true) {
+                indicatorEl.textContent = '✅';
+                indicatorEl.classList.add('text-green-600');
+            } else if (isGoalMet === false) {
+                indicatorEl.textContent = '❌';
+                indicatorEl.classList.add('text-red-600');
+            } else {
+                indicatorEl.classList.add('hidden');
+                indicatorEl.textContent = '';
+            }
+        }
+        // --- LÓGICA ATIVIDADES DO SETOR ---
+        if (formSetorAtividade) {
+            formSetorAtividade.addEventListener('submit', async(e) => {
+                e.preventDefault();
+                const responsavel = formSetorAtividade.setorAtividadeResponsavel.value;
+                const aptos = Array.from(formSetorAtividade.setorAtividadeAptos.selectedOptions).map(option => option.value);
+                if (!aptos.includes(responsavel)) {
+                    showToast("O colaborador responsável também deve estar na lista de aptos.", true);
+                    return;
+                }
+                const atividadeId = formSetorAtividade.setorAtividadeId.value;
+                const atividadeData = {
+                    descricao: formSetorAtividade.setorAtividadeDescricao.value.trim(),
+                    itNumero: formSetorAtividade.setorAtividadeIT.value.trim(),
+                    urgencia: parseInt(formSetorAtividade.setorAtividadeUrgencia.value, 10),
+                    colaboradoresAptos: aptos,
+                    colaboradorResponsavel: responsavel,
+                    timestamp: Timestamp.now()
+                };
+                const collectionPath = getSharedCollectionPath('setor_atividades');
+                if (!collectionPath) return;
+                try {
+                    if (atividadeId) {
+                        await setDoc(doc(db, collectionPath, atividadeId), atividadeData, { merge: true });
+                        showToast("Atividade do setor atualizada com sucesso!");
+                    } else {
+                        await addDoc(collection(db, collectionPath), atividadeData);
+                        showToast("Atividade do setor salva com sucesso!");
+                    }
+                    formSetorAtividade.reset();
+                    formSetorAtividade.setorAtividadeId.value = '';
+                } catch (error) {
+                    console.error("Erro ao salvar atividade do setor: ", error);
+                    showToast("Erro ao salvar atividade: " + error.message, true);
+                }
+            });
+        }
+        function renderSetorAtividadesTable(atividades) {
+            if (!listaSetorAtividadesEl) return;
+            const recentes = atividades.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate());
+            listaSetorAtividadesEl.innerHTML = '';
+            nenhumaSetorAtividadeAdicionadaEl.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(atv => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700 max-w-xs truncate" title="${atv.descricao}">${atv.descricao}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${atv.itNumero}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold text-slate-800">${atv.urgencia}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${atv.colaboradorResponsavel}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        <button data-id="${atv.id}" class="text-sky-600 hover:text-sky-800 mr-3 edit-setor-btn">Editar</button>
+                        <button data-id="${atv.id}" class="text-red-600 hover:text-red-800 delete-setor-btn">Excluir</button>
+                    </td>
+                `;
+                listaSetorAtividadesEl.appendChild(tr);
+            });
+        }
+        function handleEditSetorAtividade(id) {
+            const atividadeParaEditar = todasSetorAtividades.find(a => a.id === id);
+            if (atividadeParaEditar) {
+                formSetorAtividade.setorAtividadeId.value = atividadeParaEditar.id;
+                formSetorAtividade.setorAtividadeDescricao.value = atividadeParaEditar.descricao;
+                formSetorAtividade.setorAtividadeIT.value = atividadeParaEditar.itNumero;
+                formSetorAtividade.setorAtividadeUrgencia.value = atividadeParaEditar.urgencia;
+                formSetorAtividade.setorAtividadeResponsavel.value = atividadeParaEditar.colaboradorResponsavel;
+                const aptos = atividadeParaEditar.colaboradoresAptos || [];
+                Array.from(formSetorAtividade.setorAtividadeAptos.options).forEach(option => {
+                    option.selected = aptos.includes(option.value);
+                });
+                formSetorAtividade.scrollIntoView({ behavior: 'smooth' });
+                showToast("Dados carregados para edição.", false);
+            }
+        }
+        async function handleDeleteSetorAtividade(id) {
+            if (await showConfirmationModal("Tem certeza que deseja excluir esta atividade de setor?")) {
+                const collectionPath = getSharedCollectionPath('setor_atividades');
+                if (!collectionPath) return;
+                try {
+                    await deleteDoc(doc(db, collectionPath, id));
+                    showToast("Atividade excluída com sucesso!");
+                } catch (error) {
+                    console.error("Erro ao excluir atividade: ", error);
+                    showToast("Erro ao excluir atividade: " + error.message, true);
+                }
+            }
+        }
+        listaSetorAtividadesEl?.addEventListener('click', (e) => {
+            if (e.target.closest('.edit-setor-btn')) {
+                handleEditSetorAtividade(e.target.closest('.edit-setor-btn').dataset.id);
+            }
+            if (e.target.closest('.delete-setor-btn')) {
+                handleDeleteSetorAtividade(e.target.closest('.delete-setor-btn').dataset.id);
+            }
+        });
+        function renderMatrizCompetencias(atividades) {
+            if (!matrizCompetenciasTableEl || !nenhumaAtividadeParaMatrizEl) return;
+            const filtroColaborador = filtroColaboradorMatrizSelect.value;
+            if (atividades.length === 0) {
+                matrizCompetenciasTableEl.innerHTML = '';
+                nenhumaAtividadeParaMatrizEl.classList.remove('hidden');
+                return;
+            }
+            nenhumaAtividadeParaMatrizEl.classList.add('hidden');
+            const atividadesOrdenadas = [...atividades].sort((a, b) => (a.urgencia || 999) - (b.urgencia || 999));
+            let colaboradores = [...new Set(atividades.flatMap(a => [a.colaboradorResponsavel, ...(a.colaboradoresAptos || [])]))].filter(Boolean).sort();
+            if (filtroColaborador !== 'todos') {
+                colaboradores = [filtroColaborador];
+            }
+            if (colaboradores.length === 0) {
+                matrizCompetenciasTableEl.innerHTML = '';
+                nenhumaAtividadeParaMatrizEl.classList.remove('hidden');
+                nenhumaAtividadeParaMatrizEl.textContent = "Nenhum colaborador encontrado para o filtro selecionado."
+                return;
+            }
+            const svgCheck = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`;
+            const svgCross = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>`;
+            const svgStar = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400 mx-auto" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>`;
+            let tableHTML = `<thead class="bg-slate-100"><tr><th class="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-100 z-20">Atividade / IT</th>`;
+            colaboradores.forEach(colab => {
+                tableHTML += `<th class="px-3 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">${colab}</th>`;
+            });
+            tableHTML += `</tr></thead><tbody class="bg-white divide-y divide-slate-200">`;
+            atividadesOrdenadas.forEach(ativ => {
+                tableHTML += `<tr><td class="px-3 py-4 text-sm font-medium text-slate-900 sticky left-0 bg-white/95 backdrop-blur-sm z-10"><p>${ativ.descricao}</p><p class="text-xs text-slate-500 font-normal mt-1">IT: ${ativ.itNumero || 'N/A'}</p></td>`;
+                colaboradores.forEach(colab => {
+                    const isApto = ativ.colaboradoresAptos?.includes(colab);
+                    const isResponsavel = ativ.colaboradorResponsavel === colab;
+                    let cellContent = svgCross;
+                    if (isApto) {
+                        if (isResponsavel) {
+                            cellContent = `<div class="flex flex-col items-center justify-center space-y-1" title="Responsável pela atividade">${svgCheck}${svgStar}</div>`;
+                        } else {
+                            cellContent = svgCheck;
+                        }
+                    }
+                    tableHTML += `<td class="px-3 py-4 whitespace-nowrap text-sm text-center align-middle">${cellContent}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+            tableHTML += `</tbody>`;
+            matrizCompetenciasTableEl.innerHTML = tableHTML;
+        }
+        filtroColaboradorMatrizSelect.addEventListener('change', () => renderMatrizCompetencias(todasSetorAtividades));
+
+        // --- LÓGICA DE METAS ---
+        function resetMetaForm() {
+            formDefinirMetas.reset();
+            formDefinirMetas.metaColaboradorSelect.disabled = false;
+            formDefinirMetas.metaMesAno.disabled = false;
+            cancelEditMetaButton.classList.add('hidden');
+        }
+        cancelEditMetaButton.addEventListener('click', resetMetaForm);
+        if(formDefinirMetas){
+            formDefinirMetas.addEventListener('submit', async(e) => {
+                e.preventDefault();
+                const colaborador = formDefinirMetas.metaColaboradorSelect.value;
+                const mesAno = formDefinirMetas.metaMesAno.value;
+                if(!colaborador || !mesAno) {
+                    showToast("Por favor, selecione o colaborador e o mês/ano.", true);
+                    return;
+                }
+                const metaData = {
+                    colaboradorNome: colaborador,
+                    mesAno: mesAno,
+                    metaIts: parseInt(formDefinirMetas.metaIts.value, 10),
+                    metaSaps: parseInt(formDefinirMetas.metaSaps.value, 10),
+                    metaAvaliacoesPosto: parseInt(formDefinirMetas.metaAvaliacoesPosto.value, 10),
+                    timestamp: Timestamp.now()
+                };
+                const docId = `${colaborador}_${mesAno}`;
+                const collectionPath = getSharedCollectionPath('metas_colaboradores');
+                if(!collectionPath) return;
+                try {
+                    await setDoc(doc(db, collectionPath, docId), metaData);
+                    showToast("Meta salva/atualizada com sucesso!");
+                    resetMetaForm();
+                } catch(error){
+                    console.error("Erro ao salvar meta:", error);
+                    showToast("Erro ao salvar meta: " + error.message, true);
+                }
+            });
+        }
+        function renderUltimasMetas(metas) {
+            if (!listaUltimasMetasEl) return;
+            const recentes = metas.sort((a,b) => b.mesAno.localeCompare(a.mesAno)).slice(0, 10);
+            listaUltimasMetasEl.innerHTML = '';
+            nenhumaMetaDefinidaEl.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(meta => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${meta.colaboradorNome}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatMonthYear(meta.mesAno)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-slate-600 font-medium">${meta.metaIts}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-slate-600 font-medium">${meta.metaSaps}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-slate-600 font-medium">${meta.metaAvaliacoesPosto}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        <button data-id="${meta.id}" class="text-sky-600 hover:text-sky-800 mr-3 edit-meta-btn">Editar</button>
+                        <button data-id="${meta.id}" class="text-red-600 hover:text-red-800 delete-meta-btn">Excluir</button>
+                    </td>
+                `;
+                listaUltimasMetasEl.appendChild(tr);
+            });
+        }
+        function handleEditMeta(id) {
+            const metaParaEditar = todasMetas.find(m => m.id === id);
+            if (metaParaEditar) {
+                formDefinirMetas.metaColaboradorSelect.value = metaParaEditar.colaboradorNome;
+                formDefinirMetas.metaMesAno.value = metaParaEditar.mesAno;
+                formDefinirMetas.metaIts.value = metaParaEditar.metaIts;
+                formDefinirMetas.metaSaps.value = metaParaEditar.metaSaps;
+                formDefinirMetas.metaAvaliacoesPosto.value = metaParaEditar.metaAvaliacoesPosto;
+                formDefinirMetas.metaColaboradorSelect.disabled = true;
+                formDefinirMetas.metaMesAno.disabled = true;
+                cancelEditMetaButton.classList.remove('hidden');
+                formDefinirMetas.scrollIntoView({ behavior: 'smooth' });
+                showToast("Dados da meta carregados para edição.", false);
+            }
+        }
+        async function handleDeleteMeta(id) {
+            if (await showConfirmationModal("Tem certeza que deseja excluir esta meta?")) {
+                const collectionPath = getSharedCollectionPath('metas_colaboradores');
+                if (!collectionPath) return;
+                try {
+                    await deleteDoc(doc(db, collectionPath, id));
+                    showToast("Meta excluída com sucesso!");
+                    resetMetaForm();
+                } catch (error) {
+                    console.error("Erro ao excluir meta: ", error);
+                    showToast("Erro ao excluir meta: " + error.message, true);
+                }
+            }
+        }
+        listaUltimasMetasEl.addEventListener('click', (e) => {
+             if (e.target.closest('.edit-meta-btn')) {
+                handleEditMeta(e.target.closest('.edit-meta-btn').dataset.id);
+            }
+            if (e.target.closest('.delete-meta-btn')) {
+                handleDeleteMeta(e.target.closest('.delete-meta-btn').dataset.id);
+            }
+        });
+
+        // --- LÓGICA KAIZEN (CRUD e Gráfico) ---
+        if (formNovoKaizen) {
+            formNovoKaizen.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const kaizenId = formNovoKaizen.kaizenId.value;
+                const mesAno = formNovoKaizen.mesAnoKaizen.value;
+                const kaizenData = {
+                    colaboradorNome: formNovoKaizen.colaboradorKaizen.value.trim(),
+                    projetoKaizen: formNovoKaizen.projetoKaizen.value.trim(),
+                    saving: parseFloat(formNovoKaizen.savingKaizen.value),
+                    mesAno: mesAno,
+                    ano: mesAno.substring(0, 4),
+                    maquinaKaizen: formNovoKaizen.maquinaKaizen.value.trim(),
+                    timestamp: Timestamp.now()
+                };
+                const collectionPath = getSharedCollectionPath('kaizens');
+                if (!collectionPath) return;
+                try {
+                    if (kaizenId) {
+                        await setDoc(doc(db, collectionPath, kaizenId), kaizenData, { merge: true });
+                        showToast("Kaizen atualizado com sucesso!");
+                    } else {
+                        await addDoc(collection(db, collectionPath), kaizenData);
+                        showToast("Kaizen salvo com sucesso!");
+                    }
+                    formNovoKaizen.reset();
+                    formNovoKaizen.kaizenId.value = '';
+                } catch (error) {
+                    console.error("Erro ao salvar Kaizen: ", error);
+                    showToast("Erro ao salvar Kaizen: " + error.message, true);
+                }
+            });
+        }
+        function renderKaizensGestor() {
+            const mesFiltro = filtroMesKaizenGestor.value;
+            const colabFiltro = filtroColaboradorKaizenGestor.value;
+            let kaizensFiltrados = todasKaizens;
+            if (mesFiltro) {
+                kaizensFiltrados = kaizensFiltrados.filter(k => k.mesAno === mesFiltro);
+            }
+            if (colabFiltro !== 'todos') {
+                kaizensFiltrados = kaizensFiltrados.filter(k => k.colaboradorNome === colabFiltro);
+            }
+            kaizensFiltrados.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate());
+            listaKaizensGestorEl.innerHTML = '';
+            nenhumKaizenGestorEl.classList.toggle('hidden', kaizensFiltrados.length > 0);
+            kaizensFiltrados.forEach(k => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${k.colaboradorNome}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${k.projetoKaizen}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600 font-medium">${formatCurrency(k.saving)}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatMonthYear(k.mesAno)}</td><td class="px-4 py-3 whitespace-nowrap text-sm font-medium"><button data-id="${k.id}" class="text-sky-600 hover:text-sky-800 mr-3 edit-kaizen-btn">Editar</button><button data-id="${k.id}" class="text-red-600 hover:text-red-800 delete-kaizen-btn">Excluir</button></td>`;
+                listaKaizensGestorEl.appendChild(tr);
+            });
+        }
+        function handleEditKaizen(id) {
+            const kaizenParaEditar = todasKaizens.find(k => k.id === id);
+            if (kaizenParaEditar) {
+                formNovoKaizen.kaizenId.value = kaizenParaEditar.id;
+                formNovoKaizen.colaboradorKaizen.value = kaizenParaEditar.colaboradorNome;
+                formNovoKaizen.projetoKaizen.value = kaizenParaEditar.projetoKaizen;
+                formNovoKaizen.savingKaizen.value = kaizenParaEditar.saving;
+                formNovoKaizen.mesAnoKaizen.value = kaizenParaEditar.mesAno;
+                formNovoKaizen.maquinaKaizen.value = kaizenParaEditar.maquinaKaizen || "";
+                formNovoKaizen.scrollIntoView({ behavior: 'smooth' });
+                showToast("Dados do Kaizen carregados para edição.", false);
+            }
+        }
+        async function handleDeleteKaizen(id) {
+             if (await showConfirmationModal("Tem certeza que deseja excluir este projeto Kaizen?")) {
+                 const collectionPath = getSharedCollectionPath('kaizens');
+                 if (!collectionPath) return;
+                 try {
+                     await deleteDoc(doc(db, collectionPath, id));
+                     showToast("Kaizen excluído com sucesso!");
+                 } catch (error) {
+                      console.error("Erro ao excluir Kaizen: ", error);
+                      showToast("Erro ao excluir Kaizen: " + error.message, true);
+                  }
+            }
+        }
+        listaKaizensGestorEl.addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit-kaizen-btn')) {
+                handleEditKaizen(e.target.dataset.id);
+            }
+            if (e.target.classList.contains('delete-kaizen-btn')) {
+                handleDeleteKaizen(e.target.dataset.id);
+            }
+        });
+        filtroMesKaizenGestor.addEventListener('change', renderKaizensGestor);
+        filtroColaboradorKaizenGestor.addEventListener('change', renderKaizensGestor);
+        limparFiltroKaizenGestorBtn.addEventListener('click', () => {
+            filtroMesKaizenGestor.value = '';
+            filtroColaboradorKaizenGestor.value = 'todos';
+            renderKaizensGestor();
+        });
+        function populateKaizenFilters() {
+            const colaboradores = [...new Set(todasKaizens.map(k => k.colaboradorNome))].sort();
+            populateSelectWithOptions('filtroColaboradorKaizen', colaboradores, 'Todos', 'todos');
+            populateSelectWithOptions('filtroColaboradorKaizenGestor', colaboradores, 'Todos', 'todos');
+            const projetos = [...new Set(todasKaizens.map(k => k.projetoKaizen))].sort();
+            populateSelectWithOptions('filtroProjetoKaizen', projetos, 'Todos', 'todos');
+            const anos = [...new Set(todasKaizens.map(k => k.ano))].sort((a,b) => b-a);
+            const selectedAnos = Array.from(filtroAnoKaizenSelect.selectedOptions).map(opt => opt.value);
+            filtroAnoKaizenSelect.innerHTML = '';
+            anos.forEach(ano => {
+                const option = new Option(ano, ano);
+                if(selectedAnos.includes(ano)) option.selected = true;
+                filtroAnoKaizenSelect.add(option);
+            });
+        }
+        function getFilteredKaizens() {
+            const colabFiltro = filtroColaboradorKaizenSelect.value;
+            const projetoFiltro = filtroProjetoKaizenSelect.value;
+            const maquinaFiltro = filtroMaquinaKaizenSelect.value;
+            const anosFiltro = Array.from(filtroAnoKaizenSelect.selectedOptions).map(opt => opt.value);
+            return todasKaizens.filter(k =>
+                (colabFiltro === 'todos' || k.colaboradorNome === colabFiltro) &&
+                (projetoFiltro === 'todos' || k.projetoKaizen === projetoFiltro) &&
+                (maquinaFiltro === 'todas' || k.maquinaKaizen === maquinaFiltro) &&
+                (anosFiltro.length === 0 || anosFiltro.includes(k.ano))
+            );
+        }
+        function renderKaizenCharts() {
+            renderKaizenMensalChart();
+            renderKaizenEvolucaoChart();
+        }
+        function renderKaizenMensalChart() {
+            const ctx = document.getElementById('kaizenMensalChart')?.getContext('2d');
+            if (!ctx) return;
+            const dadosFiltrados = getFilteredKaizens();
+            if (kaizenMensalChartInstance) kaizenMensalChartInstance.destroy();
+            if (dadosFiltrados.length === 0) {
+                kaizenMensalChartInstance = null;
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                return;
+            }
+            const savingsMensais = {};
+            dadosFiltrados.forEach(k => {
+                const mesAno = k.mesAno;
+                const maquina = k.maquinaKaizen || 'Não Especificado';
+                if (mesAno) {
+                    if (!savingsMensais[maquina]) {
+                        savingsMensais[maquina] = {};
+                    }
+                    savingsMensais[maquina][mesAno] = (savingsMensais[maquina][mesAno] || 0) + k.saving;
+                }
+            });
+            const mesesUnicos = [...new Set(dadosFiltrados.map(k => k.mesAno))].sort();
+            const maquinasUnicas = Object.keys(savingsMensais).sort();
+            const machineColors = {};
+            maquinasUnicas.forEach((maquina, index) => {
+                const hue = (index * 137.508) % 360; // Golden angle for color distribution
+                machineColors[maquina] = `hsl(${hue}, 70%, 60%)`;
+            });
+            const datasets = maquinasUnicas.map(maquina => {
+                return {
+                    label: maquina,
+                    data: mesesUnicos.map(mes => savingsMensais[maquina][mes] || 0),
+                    backgroundColor: machineColors[maquina]
+                };
+            });
+            kaizenMensalChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: mesesUnicos.map(formatMonthYear),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: false },
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${formatCurrency(c.raw)}` } }
+                    },
+                    scales: {
+                         x: { stacked: true },
+                        y: {
+                             stacked: true,
+                            beginAtZero: true,
+                            ticks: { callback: value => formatCurrency(value) }
+                         }
+                     }
+                }
+            });
+        }
+        function renderKaizenEvolucaoChart() {
+            const ctx = document.getElementById('kaizenChart')?.getContext('2d');
+            if (!ctx) {
+                if (kaizenChartInstance) kaizenChartInstance.destroy();
+                kaizenChartInstance = null;
+                totalSavingKaizenEl.textContent = formatCurrency(0);
+                return;
+            }
+            const dadosFiltrados = getFilteredKaizens();
+            if (dadosFiltrados.length === 0) {
+                if (kaizenChartInstance) kaizenChartInstance.destroy();
+                kaizenChartInstance = null;
+                ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+                totalSavingKaizenEl.textContent = formatCurrency(0);
+                return;
+            }
+            const savingsMensais = {};
+            dadosFiltrados.forEach(k => {
+                if (!savingsMensais[k.projetoKaizen]) savingsMensais[k.projetoKaizen] = {};
+                savingsMensais[k.projetoKaizen][k.mesAno] = (savingsMensais[k.projetoKaizen][k.mesAno] || 0) + k.saving;
+            });
+            const mesesUnicos = [...new Set(dadosFiltrados.map(k => k.mesAno))].sort();
+            const projetosUnicos = Object.keys(savingsMensais).sort();
+            const savingsAcumulados = {};
+            projetosUnicos.forEach(projeto => {
+                savingsAcumulados[projeto] = {};
+                let acumulado = 0;
+                mesesUnicos.forEach(mes => {
+                    acumulado += (savingsMensais[projeto][mes] || 0);
+                    savingsAcumulados[projeto][mes] = acumulado;
+                });
+            });
+            let finalAccumulatedSaving = 0;
+            projetosUnicos.forEach(projeto => {
+                const ultimoMesDoProjeto = mesesUnicos.filter(m => savingsAcumulados[projeto][m] != null).pop();
+                if(ultimoMesDoProjeto) {
+                     finalAccumulatedSaving += savingsAcumulados[projeto][ultimoMesDoProjeto];
+                }
+            });
+            totalSavingKaizenEl.textContent = formatCurrency(finalAccumulatedSaving);
+            const projectColors = {};
+            projetosUnicos.forEach((proj, index) => {
+                const hue = (index * 360 / projetosUnicos.length) % 360;
+                projectColors[proj] = `hsl(${hue}, 70%, 60%)`;
+            });
+            const datasets = projetosUnicos.map(projeto => ({
+                label: projeto,
+                data: mesesUnicos.map(mes => savingsAcumulados[projeto][mes] || null),
+                backgroundColor: projectColors[projeto],
+                spanGaps: true
+            }));
+            if (kaizenChartInstance) kaizenChartInstance.destroy();
+            kaizenChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: mesesUnicos.map(formatMonthYear), datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: false },
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const projeto = context.dataset.label || '';
+                                    const mesAno = mesesUnicos[context.dataIndex];
+                                    const savingDoMes = savingsMensais[projeto]?.[mesAno] || 0;
+                                    return `${projeto}: ${formatCurrency(savingDoMes)} (no mês)`;
+                                },
+                                footer: function(tooltipItems) {
+                                    let totalAcumuladoMes = 0;
+                                    tooltipItems.forEach(function(tooltipItem) {
+                                        totalAcumuladoMes += tooltipItem.parsed.y;
+                                    });
+                                    return `Total Acumulado: ${formatCurrency(totalAcumuladoMes)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, ticks: { callback: value => formatCurrency(value) } }
+                    }
+                }
+            });
+        }
+        filtroColaboradorKaizenSelect.addEventListener('change', renderKaizenCharts);
+        filtroProjetoKaizenSelect.addEventListener('change', renderKaizenCharts);
+        filtroMaquinaKaizenSelect.addEventListener('change', renderKaizenCharts);
+        filtroAnoKaizenSelect.addEventListener('change', renderKaizenCharts);
+
+        // --- LÓGICA ATIVIDADES (CRUD) ---
+        formNovaAtividade.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const atividadeId = formNovaAtividade.atividadeId.value;
+            const dataPrevista = formNovaAtividade.dataPrevistaConclusao.value;
+            const mesAnoPrevisto = dataPrevista ? dataPrevista.substring(0, 7) : null;
+            const atividade = {
+                colaboradorNome: formNovaAtividade.colaboradorNome.value.trim(),
+                descricao: formNovaAtividade.descricaoAtividade.value.trim(),
+                dataInicio: formNovaAtividade.dataInicio.value ? Timestamp.fromDate(new Date(formNovaAtividade.dataInicio.value + "T00:00:00")) : null,
+                dataPrevistaConclusao: dataPrevista ? Timestamp.fromDate(new Date(dataPrevista + "T00:00:00")) : null,
+                dataConclusao: formNovaAtividade.dataConclusao.value ? Timestamp.fromDate(new Date(formNovaAtividade.dataConclusao.value + "T00:00:00")) : null,
+                status: formNovaAtividade.statusAtividade.value,
+                mesAnoPrevistoConclusao: mesAnoPrevisto,
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('atividades_gestor');
+            if (!collectionPath) return;
+            try {
+                if (atividadeId) {
+                    await setDoc(doc(db, collectionPath, atividadeId), atividade, { merge: true });
+                    showToast("Atividade atualizada com sucesso!");
+                } else {
+                    await addDoc(collection(db, collectionPath), atividade);
+                    showToast("Atividade salva com sucesso!");
+                }
+                formNovaAtividade.reset();
+                formNovaAtividade.atividadeId.value = '';
+            } catch (error) {
+                console.error("Erro ao salvar atividade: ", error);
+                showToast("Erro ao salvar atividade: " + error.message, true);
+            }
+        });
+        function renderAtividades(atividades) {
+            if(!listaAtividadesEl) return;
+            listaAtividadesEl.innerHTML = '';
+            nenhumaAtividadeEl.classList.toggle('hidden', atividades.length > 0);
+            atividades.forEach(atividade => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50';
+                const statusClass = getStatusClass(atividade.status);
+                tr.innerHTML = `<td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${atividade.colaboradorNome}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700 max-w-xs truncate" title="${atividade.descricao}">${atividade.descricao}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataInicio, true) || 'N/D'}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataPrevistaConclusao, true)}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataConclusao, true) || 'N/A'}</td><td class="px-4 py-3 whitespace-nowrap text-sm"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">${atividade.status}</span></td><td class="px-4 py-3 whitespace-nowrap text-sm font-medium"><button data-id="${atividade.id}" class="text-sky-600 hover:text-sky-800 mr-2 edit-btn">Editar</button><button data-id="${atividade.id}" class="text-red-600 hover:text-red-800 delete-btn">Excluir</button></td>`;
+                listaAtividadesEl.appendChild(tr);
+            });
+            document.querySelectorAll('.edit-btn').forEach(button => button.addEventListener('click', () => handleEditAtividade(button.dataset.id, todasAtividadesGestor)));
+            document.querySelectorAll('.delete-btn').forEach(button => button.addEventListener('click', () => handleDeleteAtividade(button.dataset.id)));
+        }
+        filtroMesConclusao.addEventListener('change', refreshUI);
+        filtroColaborador.addEventListener('change', refreshUI);
+        limparFiltrosButton.addEventListener('click', () => { filtroMesConclusao.value = ''; filtroColaborador.value = ''; refreshUI(); });
+        function handleEditAtividade(id, sourceArray) {
+            const atividadeParaEditar = sourceArray.find(a => a.id === id);
+            if (atividadeParaEditar) {
+                formNovaAtividade.atividadeId.value = atividadeParaEditar.id;
+                formNovaAtividade.colaboradorNome.value = atividadeParaEditar.colaboradorNome;
+                formNovaAtividade.descricaoAtividade.value = atividadeParaEditar.descricao;
+                formNovaAtividade.dataInicio.value = formatFirebaseDate(atividadeParaEditar.dataInicio);
+                formNovaAtividade.dataPrevistaConclusao.value = formatFirebaseDate(atividadeParaEditar.dataPrevistaConclusao);
+                formNovaAtividade.dataConclusao.value = formatFirebaseDate(atividadeParaEditar.dataConclusao);
+                formNovaAtividade.statusAtividade.value = atividadeParaEditar.status;
+                formNovaAtividade.scrollIntoView({ behavior: 'smooth' });
+                showToast("Dados da atividade carregados para edição.", false);
+            }
+        }
+        async function handleDeleteAtividade(id) {
+            if (await showConfirmationModal("Tem certeza que deseja excluir esta atividade? Esta ação não pode ser desfeita.")) {
+                const collectionPath = getSharedCollectionPath('atividades_gestor');
+                if (!collectionPath) return;
+                try {
+                    await deleteDoc(doc(db, collectionPath, id));
+                    showToast("Atividade excluída com sucesso!");
+                } catch (error) {
+                    console.error("Erro ao excluir atividade: ", error);
+                    showToast("Erro ao excluir atividade: " + error.message, true);
+                }
+            }
+        }
+
+        // --- LÓGICA EQUIPE ---
+        function populateAtividadesParaEquipe() {
+            const colaboradorEquipeSelect = document.getElementById('colaboradorEquipeSelect');
+            const filtroMesEquipeInput = document.getElementById('filtroMesEquipe');
+            const selectAtividadeVinculada = document.getElementById('atividadeVinculada');
+            if(!colaboradorEquipeSelect || !selectAtividadeVinculada) return;
+            const colaboradorSelecionado = colaboradorEquipeSelect.value;
+            const mesSelecionado = filtroMesEquipeInput.value;
+            const currentSelectedActivity = selectAtividadeVinculada.value;
+            selectAtividadeVinculada.innerHTML = '<option value="">Selecione uma atividade...</option>';
+            let atividadesFiltradas = todasAtividadesGestor;
+            if (colaboradorSelecionado) {
+                atividadesFiltradas = atividadesFiltradas.filter(a => a.colaboradorNome === colaboradorSelecionado);
+            }
+            if (mesSelecionado) {
+                atividadesFiltradas = atividadesFiltradas.filter(a => a.mesAnoPrevistoConclusao === mesSelecionado);
+            }
+            atividadesFiltradas.sort((a,b) => (a.dataPrevistaConclusao?.toDate() || 0) - (b.dataPrevistaConclusao?.toDate() || 0));
+            atividadesFiltradas.forEach(atividade => {
+                if (atividade.status !== 'Concluído' && atividade.status !== 'Cancelado') {
+                    const dataEntregaFormatada = formatFirebaseDate(atividade.dataPrevistaConclusao, true);
+                    const optionText = `${atividade.descricao.substring(0,40)}... (Entrega: ${dataEntregaFormatada || 'N/D'})`;
+                    selectAtividadeVinculada.add(new Option(optionText, atividade.id));
+                }
+            });
+             if ([...selectAtividadeVinculada.options].some(opt => opt.value === currentSelectedActivity)) {
+                selectAtividadeVinculada.value = currentSelectedActivity;
+            }
+        }
+        document.getElementById('colaboradorEquipeSelect')?.addEventListener('change', populateAtividadesParaEquipe);
+        document.getElementById('filtroMesEquipe')?.addEventListener('change', populateAtividadesParaEquipe);
+        document.getElementById('atividadeVinculada')?.addEventListener('change', (e) => {
+            const atividadeId = e.target.value;
+            const form = document.getElementById('formComplementoEquipe');
+            const dataInicioInput = document.getElementById('dataInicioRealEquipe');
+            const dataConclusaoInput = document.getElementById('dataConclusaoEquipe');
+            const statusSelect = document.getElementById('statusAtividadeEquipe');
+            if (!atividadeId) {
+                form.reset();
+                return;
+            }
+            const atividadeSelecionada = todasAtividadesGestor.find(a => a.id === atividadeId);
+            if (atividadeSelecionada) {
+                dataInicioInput.value = formatFirebaseDate(atividadeSelecionada.dataInicio);
+                dataConclusaoInput.value = formatFirebaseDate(atividadeSelecionada.dataConclusao);
+                statusSelect.value = atividadeSelecionada.status || 'Não iniciado';
+            }
+        });
+        document.getElementById('formComplementoEquipe')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const atividadeId = document.getElementById('atividadeVinculada').value;
+            if (!atividadeId) {
+                showToast("Por favor, selecione uma atividade para atualizar.", true);
+                return;
+            }
+            const dataInicioValue = document.getElementById('dataInicioRealEquipe').value;
+            const dataConclusaoValue = document.getElementById('dataConclusaoEquipe').value;
+            let statusValue = document.getElementById('statusAtividadeEquipe').value;
+            if (dataConclusaoValue) {
+                statusValue = 'Concluído';
+            } else if (dataInicioValue && statusValue === 'Não iniciado') {
+                statusValue = 'Andamento';
+            }
+            const dataToUpdate = {
+                status: statusValue,
+                dataInicio: dataInicioValue ? Timestamp.fromDate(new Date(dataInicioValue + "T00:00:00")) : null,
+                dataConclusao: dataConclusaoValue ? Timestamp.fromDate(new Date(dataConclusaoValue + "T00:00:00")) : null,
+            };
+            const collectionPath = getSharedCollectionPath('atividades_gestor');
+            if (!collectionPath) return;
+            try {
+                const atividadeRef = doc(db, collectionPath, atividadeId);
+                await updateDoc(atividadeRef, dataToUpdate);
+                showToast("Atividade atualizada com sucesso!");
+                document.getElementById('formComplementoEquipe').reset();
+                populateAtividadesParaEquipe();
+            } catch (error) {
+                console.error("Erro ao atualizar atividade:", error);
+                showToast("Erro ao atualizar atividade: " + error.message, true);
+            }
+        });
+        function loadAtividadesConsultaEquipe() {
+            const filtroMes = document.getElementById('filtroMesConsultaEquipe').value;
+            const filtroColab = document.getElementById('filtroColaboradorConsultaEquipe').value;
+            let atividadesFiltradas = todasAtividadesGestor;
+            if(filtroMes) {
+                atividadesFiltradas = atividadesFiltradas.filter(a => a.mesAnoPrevistoConclusao === filtroMes);
+            }
+            if(filtroColab) {
+                atividadesFiltradas = atividadesFiltradas.filter(a => a.colaboradorNome === filtroColab);
+            }
+            renderAtividadesEquipe(atividadesFiltradas.sort((a,b) => (a.dataPrevistaConclusao?.toDate() || 0) - (b.dataPrevistaConclusao?.toDate() || 0)));
+        }
+        function renderAtividadesEquipe(atividades) {
+            if (!listaAtividadesEquipeEl) return;
+            listaAtividadesEquipeEl.innerHTML = '';
+            nenhumaAtividadeEquipeEl.classList.toggle('hidden', atividades.length > 0);
+            atividades.forEach(atividade => {
+                const tr = document.createElement('tr');
+                const statusClass = getStatusClass(atividade.status);
+                tr.innerHTML = `<td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${atividade.colaboradorNome}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700 max-w-xs truncate" title="${atividade.descricao}">${atividade.descricao}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataInicio, true) || 'N/D'}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataPrevistaConclusao, true)}</td><td class="px-4 py-3 whitespace-nowrap text-sm text-slate-500">${formatFirebaseDate(atividade.dataConclusao, true) || 'N/A'}</td><td class="px-4 py-3 whitespace-nowrap text-sm"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">${atividade.status}</span></td>`;
+                listaAtividadesEquipeEl.appendChild(tr);
+            });
+        }
+        document.getElementById('filtroMesConsultaEquipe')?.addEventListener('change', loadAtividadesConsultaEquipe);
+        document.getElementById('filtroColaboradorConsultaEquipe')?.addEventListener('change', loadAtividadesConsultaEquipe);
+        document.getElementById('limparFiltrosEquipe')?.addEventListener('click', () => {
+             document.getElementById('filtroMesConsultaEquipe').value = '';
+             document.getElementById('filtroColaboradorConsultaEquipe').value = '';
+             loadAtividadesConsultaEquipe();
+        });
+
+        // --- LÓGICAS DE FORMULÁRIOS DE LANÇAMENTO (5S, TPM, IT, etc.) ---
+        document.getElementById('formAvaliacao5s')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dataAvaliacao = document.getElementById('dataAvaliacao5s').value;
+            const notas = [
+                parseFloat(document.getElementById('notaS1').value),
+                parseFloat(document.getElementById('notaS2').value),
+                parseFloat(document.getElementById('notaS3').value),
+                parseFloat(document.getElementById('notaS4').value),
+                parseFloat(document.getElementById('notaS5').value)
+            ];
+            const media = notas.reduce((a, b) => a + b, 0) / notas.length;
+            const avaliacaoData = {
+                setor: document.getElementById('setorAvaliado5s').value,
+                dataAvaliacao: Timestamp.fromDate(new Date(dataAvaliacao + "T00:00:00")),
+                mesAnoAvaliacao: dataAvaliacao.substring(0, 7),
+                mediaAvaliacao: media,
+                notas: { s1: notas[0], s2: notas[1], s3: notas[2], s4: notas[3], s5: notas[4] },
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('avaliacoes_5s');
+            if (!collectionPath) return;
+            try {
+                await addDoc(collection(db, collectionPath), avaliacaoData);
+                showToast("Avaliação 5S salva com sucesso!");
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao salvar Avaliação 5S:", error);
+                showToast("Erro ao salvar Avaliação 5S: " + error.message, true);
+            }
+        });
+        function renderUltimasAvaliacoes5S(avaliacoes) {
+            const el = document.getElementById('listaUltimasAvaliacoes5S');
+            const placeholder = document.getElementById('nenhumaAvaliacao5sAdicionada');
+            if (!el || !placeholder) return;
+            const recentes = avaliacoes.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate()).slice(0,10);
+            el.innerHTML = '';
+            placeholder.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(av => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${av.setor}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatFirebaseDate(av.dataAvaliacao, true)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800">${av.mediaAvaliacao.toFixed(2)}</td>
+                `;
+                el.appendChild(tr);
+            });
+        }
+        document.getElementById('formAvaliacaoTpm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dataAvaliacao = document.getElementById('dataAvaliacaoTpm').value;
+            const notas = [
+                parseFloat(document.getElementById('notaTpmLimpeza').value),
+                parseFloat(document.getElementById('notaTpmOrganizacao').value),
+                parseFloat(document.getElementById('notaTpmControle').value),
+                parseFloat(document.getElementById('notaTpmEngajamento').value),
+                parseFloat(document.getElementById('notaTpmPercepcao').value)
+            ];
+            const media = notas.reduce((a, b) => a + b, 0) / notas.length;
+            const avaliacaoData = {
+                maquina: document.getElementById('maquinaAvaliadaTpm').value,
+                dataAvaliacao: Timestamp.fromDate(new Date(dataAvaliacao + "T00:00:00")),
+                mesAnoAvaliacao: dataAvaliacao.substring(0, 7),
+                mediaAvaliacao: media,
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('avaliacoes_tpm');
+            if (!collectionPath) return;
+            try {
+                await addDoc(collection(db, collectionPath), avaliacaoData);
+                showToast("Avaliação TPM salva com sucesso!");
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao salvar Avaliação TPM:", error);
+                showToast("Erro ao salvar Avaliação TPM: " + error.message, true);
+            }
+        });
+        function renderUltimasAvaliacoesTpm(avaliacoes) {
+            const el = document.getElementById('listaUltimasAvaliacoesTpm');
+            const placeholder = document.getElementById('nenhumaAvaliacaoTpmAdicionada');
+            if (!el || !placeholder) return;
+            const recentes = avaliacoes.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate()).slice(0,10);
+            el.innerHTML = '';
+            placeholder.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(av => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${av.maquina.split(" - ")[0]}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatFirebaseDate(av.dataAvaliacao, true)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800">${av.mediaAvaliacao.toFixed(2)}</td>
+                `;
+                el.appendChild(tr);
+            });
+        }
+        document.getElementById('formNovaItConcluida')?.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const dataConclusao = document.getElementById('dataConclusaoIt').value;
+            const itData = {
+                colaboradorNome: document.getElementById('colaboradorIt').value,
+                nomeIt: document.getElementById('nomeIt').value.trim(),
+                dataConclusao: Timestamp.fromDate(new Date(dataConclusao + "T00:00:00")),
+                mesAnoConclusao: dataConclusao.substring(0, 7),
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('its_concluidas');
+            if (!collectionPath) return;
+            try {
+                await addDoc(collection(db, collectionPath), itData);
+                showToast("IT Concluída salva com sucesso!");
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao salvar IT:", error);
+                showToast("Erro ao salvar IT: " + error.message, true);
+            }
+        });
+        function renderUltimasItsConcluidas(its) {
+            const el = document.getElementById('listaUltimasItsConcluidas');
+            const placeholder = document.getElementById('nenhumaItConcluidaAdicionada');
+            if (!el || !placeholder) return;
+            const recentes = its.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate()).slice(0,10);
+            el.innerHTML = '';
+            placeholder.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${it.colaboradorNome}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${it.nomeIt}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatFirebaseDate(it.dataConclusao, true)}</td>
+                `;
+                el.appendChild(tr);
+            });
+        }
+        document.getElementById('formNovaSapImplementada')?.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const dataConclusao = document.getElementById('dataConclusaoSap').value;
+            const sapData = {
+                colaboradorNome: document.getElementById('colaboradorSap').value,
+                nomeSap: document.getElementById('nomeSap').value.trim(),
+                dataConclusao: Timestamp.fromDate(new Date(dataConclusao + "T00:00:00")),
+                mesAnoConclusao: dataConclusao.substring(0, 7),
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('saps_implementadas');
+            if (!collectionPath) return;
+            try {
+                await addDoc(collection(db, collectionPath), sapData);
+                showToast("SAP Implementada salva com sucesso!");
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao salvar SAP:", error);
+                showToast("Erro ao salvar SAP: " + error.message, true);
+            }
+        });
+        function renderUltimasSapsImplementadas(saps) {
+            const el = document.getElementById('listaUltimasSapsImplementadas');
+            const placeholder = document.getElementById('nenhumaSapImplementadaAdicionada');
+            if (!el || !placeholder) return;
+            const recentes = saps.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate()).slice(0,10);
+            el.innerHTML = '';
+            placeholder.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(sap => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${sap.colaboradorNome}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${sap.nomeSap}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatFirebaseDate(sap.dataConclusao, true)}</td>
+                `;
+                el.appendChild(tr);
+            });
+        }
+        document.getElementById('formNovaAvaliacaoPosto')?.addEventListener('submit', async(e) => {
+            e.preventDefault();
+            const dataAvaliacao = document.getElementById('dataAvaliacaoPosto').value;
+            const avaliacaoData = {
+                colaboradorNome: document.getElementById('colaboradorAvaliacaoPosto').value,
+                nomePosto: document.getElementById('nomePostoTrabalho').value.trim(),
+                dataAvaliacao: Timestamp.fromDate(new Date(dataAvaliacao + "T00:00:00")),
+                mesAnoAvaliacao: dataAvaliacao.substring(0, 7),
+                timestamp: Timestamp.now()
+            };
+            const collectionPath = getSharedCollectionPath('avaliacoes_posto_trabalho');
+            if (!collectionPath) return;
+            try {
+                await addDoc(collection(db, collectionPath), avaliacaoData);
+                showToast("Avaliação de Posto salva com sucesso!");
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao salvar Avaliação de Posto:", error);
+                showToast("Erro ao salvar Avaliação de Posto: " + error.message, true);
+            }
+        });
+        function renderUltimasAvaliacoesPosto(avaliacoes) {
+            const el = document.getElementById('listaUltimasAvaliacoesPosto');
+            const placeholder = document.getElementById('nenhumaAvaliacaoPostoAdicionada');
+            if (!el || !placeholder) return;
+            const recentes = avaliacoes.sort((a,b) => b.timestamp.toDate() - a.timestamp.toDate()).slice(0,10);
+            el.innerHTML = '';
+            placeholder.classList.toggle('hidden', recentes.length > 0);
+            recentes.forEach(av => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-700">${av.colaboradorNome}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${av.nomePosto}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${formatFirebaseDate(av.dataAvaliacao, true)}</td>
+                `;
+                el.appendChild(tr);
+            });
+        }
+
+        // --- LÓGICA DOS GRÁFICOS DO DASHBOARD ---
+        function renderStatusChart(atividades) {
+            const ctx = document.getElementById('statusChart')?.getContext('2d');
+            if (!ctx) return;
+            const contagemStatus = atividades.reduce((acc, ativ) => {
+                acc[ativ.status] = (acc[ativ.status] || 0) + 1;
+                return acc;
+            }, {});
+            const labels = Object.keys(contagemStatus);
+            const data = Object.values(contagemStatus);
+            const backgroundColors = labels.map(label => {
+                const colorMap = {
+                    'Não iniciado': '#3b82f6', 'Andamento': '#facc15',
+                    'Concluído': '#22c55e', 'Atrasado': '#ef4444',
+                    'Cancelado': '#6b7280'
+                };
+                return colorMap[label] || '#a1a1aa';
+            });
+            if (statusChartInstance) statusChartInstance.destroy();
+            statusChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{ data: data, backgroundColor: backgroundColors }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' }, title: { display: false } }
+                }
+            });
+        }
+        function renderEntregaMensalChart(atividades) {
+            const ctx = document.getElementById('entregaMensalChart')?.getContext('2d');
+             if (!ctx) {
+                updateChartGoalIndicator('entregaMensalStatusIndicator', null);
+                return;
+             }
+            const META_ENTREGA_NO_PRAZO = 70;
+            const entregasMensais = {};
+            atividades.forEach(a => {
+                if (!a.mesAnoPrevistoConclusao || a.status === 'Cancelado') return;
+                const mesAno = a.mesAnoPrevistoConclusao;
+                if (!entregasMensais[mesAno]) entregasMensais[mesAno] = { noPrazo: 0, totalConsiderado: 0 };
+                if (['Concluído', 'Não iniciado', 'Andamento', 'Atrasado'].includes(a.status)) {
+                    entregasMensais[mesAno].totalConsiderado++;
+                    if (a.status === 'Concluído' && a.dataConclusao?.toDate() && a.dataPrevistaConclusao?.toDate() &&
+                        a.dataConclusao.toDate() <= a.dataPrevistaConclusao.toDate()) {
+                        entregasMensais[mesAno].noPrazo++;
+                    }
+                }
+            });
+            const mesesOrdenados = Object.keys(entregasMensais).sort();
+            const labelsGrafico = mesesOrdenados.map(formatMonthYear);
+            const percentuaisNoPrazo = mesesOrdenados.map(mesAno =>
+                entregasMensais[mesAno].totalConsiderado > 0 ?
+                (entregasMensais[mesAno].noPrazo / entregasMensais[mesAno].totalConsiderado) * 100 : 0
+            );
+            const hoje = new Date();
+            const mesAnoAtual = hoje.getFullYear() + '-' + (hoje.getMonth() + 1).toString().padStart(2, '0');
+            let isGoalMet = null;
+            let ultimoPercentualRelevante = null;
+            for (let i = mesesOrdenados.length - 1; i >= 0; i--) {
+                const mes = mesesOrdenados[i];
+                if (mes <= mesAnoAtual) {
+                    ultimoPercentualRelevante = percentuaisNoPrazo[i];
+                    break;
+                }
+            }
+            if (ultimoPercentualRelevante !== null) {
+                isGoalMet = ultimoPercentualRelevante >= META_ENTREGA_NO_PRAZO;
+            }
+            updateChartGoalIndicator('entregaMensalStatusIndicator', isGoalMet);
+            const backgroundColors = percentuaisNoPrazo.map(p => p >= META_ENTREGA_NO_PRAZO ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
+            const borderColors = percentuaisNoPrazo.map(p => p >= META_ENTREGA_NO_PRAZO ? 'rgb(75, 192, 192)' : 'rgb(255, 99, 132)');
+            if (entregaMensalChartInstance) entregaMensalChartInstance.destroy();
+            entregaMensalChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [{
+                        label: '% Entregas no Prazo',
+                        data: percentuaisNoPrazo,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100, ticks: { callback: value => value + "%" } } },
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: `Meta: ${META_ENTREGA_NO_PRAZO}%`, font: {weight: 'normal'} },
+                        tooltip: { callbacks: { label: context => `${context.dataset.label || ''}: ${context.parsed.y.toFixed(2)}%` } }
+                    }
+                }
+            });
+        }
+        function renderAvaliacao5sChart() {
+            const ctx = document.getElementById('avaliacao5sChart')?.getContext('2d');
+            if (!ctx) {
+                updateChartGoalIndicator('avaliacao5sStatusIndicator', null);
+                return;
+            }
+            const setorSelecionado = document.getElementById('filtroSetor5sChart').value;
+            const titleTextEl = document.getElementById('avaliacao5sChartTitleText');
+            if(titleTextEl) {
+                 titleTextEl.textContent = `Média Mensal Avaliação 5S ${setorSelecionado === 'todos' ? '' : `- ${setorSelecionado}`} (Meta: ${META_5S})`;
+            }
+            let dadosFiltrados = todasAvaliacoes5S;
+            if (setorSelecionado !== 'todos') {
+                dadosFiltrados = todasAvaliacoes5S.filter(a => a.setor === setorSelecionado);
+            }
+            const mediasMensais = {};
+            dadosFiltrados.forEach(av => {
+                if (!av.mesAnoAvaliacao || av.mediaAvaliacao == null) return;
+                const mesAno = av.mesAnoAvaliacao;
+                if (!mediasMensais[mesAno]) mediasMensais[mesAno] = { somaMedias: 0, quantidade: 0 };
+                mediasMensais[mesAno].somaMedias += av.mediaAvaliacao;
+                mediasMensais[mesAno].quantidade++;
+            });
+            const mesesOrdenados = Object.keys(mediasMensais).sort();
+            const labelsGrafico = mesesOrdenados.map(formatMonthYear);
+            const dadosGrafico = mesesOrdenados.map(mesAno =>
+                mediasMensais[mesAno].quantidade > 0 ? (mediasMensais[mesAno].somaMedias / mediasMensais[mesAno].quantidade) : 0
+            );
+            let isGoalMet = null;
+            if (dadosGrafico.length > 0) {
+                const latestAverage = dadosGrafico[dadosGrafico.length - 1];
+                isGoalMet = latestAverage >= META_5S;
+            }
+            updateChartGoalIndicator('avaliacao5sStatusIndicator', isGoalMet);
+            if (avaliacao5sChartInstance) avaliacao5sChartInstance.destroy();
+            avaliacao5sChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [{
+                        label: `Média 5S ${setorSelecionado === 'todos' ? 'Geral' : setorSelecionado}`,
+                        data: dadosGrafico,
+                        borderColor: 'rgb(255, 159, 64)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.5)',
+                        tension: 0.1,
+                        fill: false
+                    }, {
+                        label: 'Meta 5S',
+                        data: Array(labelsGrafico.length).fill(META_5S),
+                        borderColor: 'rgba(255, 0, 0, 0.7)',
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 0.5 } } },
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        title: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: context => {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) { label += context.parsed.y.toFixed(2); }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        function renderAvaliacaoTpmChart() {
+            const ctx = document.getElementById('avaliacaoTpmChart')?.getContext('2d');
+            if (!ctx) {
+                updateChartGoalIndicator('avaliacaoTpmStatusIndicator', null);
+                return;
+            }
+            const maquinaSelecionada = document.getElementById('filtroMaquinaTpmChart').value;
+            let dadosFiltrados = todasAvaliacoesTpm;
+            if (maquinaSelecionada !== 'todas') {
+                dadosFiltrados = todasAvaliacoesTpm.filter(a => a.maquina === maquinaSelecionada);
+            }
+            const mediasMensais = {};
+            dadosFiltrados.forEach(av => {
+                if (!av.mesAnoAvaliacao || av.mediaAvaliacao == null) return;
+                const mesAno = av.mesAnoAvaliacao;
+                if (!mediasMensais[mesAno]) mediasMensais[mesAno] = { somaMedias: 0, quantidade: 0 };
+                mediasMensais[mesAno].somaMedias += av.mediaAvaliacao;
+                mediasMensais[mesAno].quantidade++;
+            });
+            const mesesOrdenados = Object.keys(mediasMensais).sort();
+            const labelsGrafico = mesesOrdenados.map(formatMonthYear);
+            const dadosGrafico = mesesOrdenados.map(mesAno =>
+                mediasMensais[mesAno].quantidade > 0 ? (mediasMensais[mesAno].somaMedias / mediasMensais[mesAno].quantidade) : 0
+            );
+            let isGoalMet = null;
+            if (dadosGrafico.length > 0) {
+                const latestAverage = dadosGrafico[dadosGrafico.length - 1];
+                isGoalMet = latestAverage >= META_TPM;
+            }
+            updateChartGoalIndicator('avaliacaoTpmStatusIndicator', isGoalMet);
+            if (avaliacaoTpmChartInstance) avaliacaoTpmChartInstance.destroy();
+            avaliacaoTpmChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [{
+                        label: `Média TPM ${maquinaSelecionada === 'todas' ? 'Geral' : maquinaSelecionada.split(" - ")[0]}`,
+                        data: dadosGrafico,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                        tension: 0.1,
+                        fill: false
+                    }, {
+                        label: 'Meta TPM',
+                        data: Array(labelsGrafico.length).fill(4.6),
+                        borderColor: 'rgba(255, 0, 0, 0.7)',
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.1,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 0.5 } } },
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        title: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: context => {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) { label += context.parsed.y.toFixed(2); }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        function getDadosMetaAcumulada(mesesDoPeriodo, filtroColaborador, tipoMeta) {
+            const dadosMeta = [];
+            let metaAcumulada = 0;
+            const colaboradoresParaCalcular = (filtroColaborador === 'todos')
+                ? [...new Set(todasMetas.map(m => m.colaboradorNome))]
+                : [filtroColaborador];
+            mesesDoPeriodo.forEach(mesAno => {
+                let metaMensalTotal = 0;
+                colaboradoresParaCalcular.forEach(colaborador => {
+                    const metaDefinida = todasMetas.find(m =>
+                        m.colaboradorNome === colaborador &&
+                        m.mesAno === mesAno &&
+                        m[tipoMeta] != null
+                    );
+                    if (metaDefinida) {
+                        metaMensalTotal += Number(metaDefinida[tipoMeta]) || 0;
+                    }
+                });
+                metaAcumulada += metaMensalTotal;
+                dadosMeta.push(metaAcumulada);
+            });
+            return dadosMeta;
+        }
+        function renderItsConcluidasChart() {
+            const ctx = document.getElementById('itsConcluidasChart')?.getContext('2d');
+            if (!ctx) {
+                updateChartGoalIndicator('itsConcluidasStatusIndicator', null);
+                return;
+            }
+            const filtroColaborador = document.getElementById('filtroColaboradorItChart').value;
+            const filtroAno = document.getElementById('filtroAnoItChart').value;
+            let dadosParaGrafico = todasItsConcluidas;
+            if (filtroColaborador !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(it => it.colaboradorNome === filtroColaborador);
+            }
+            if (filtroAno !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(it => it.mesAnoConclusao?.startsWith(filtroAno));
+            }
+            const realMonths = dadosParaGrafico.map(it => it.mesAnoConclusao).filter(Boolean);
+            const metaMonths = todasMetas
+                .filter(m => {
+                    const colabOk = filtroColaborador === 'todos' || m.colaboradorNome === filtroColaborador;
+                    const anoOk = filtroAno === 'todos' || m.mesAno.startsWith(filtroAno);
+                    return colabOk && anoOk && m.metaIts != null;
+                })
+                .map(m => m.mesAno);
+            let mesesDoPeriodo = [...new Set([...realMonths, ...metaMonths])].sort();
+            if (filtroAno !== 'todos') {
+                mesesDoPeriodo = mesesDoPeriodo.filter(m => m.startsWith(filtroAno));
+            }
+            if (mesesDoPeriodo.length === 0) {
+                 if (itsConcluidasChartInstance) itsConcluidasChartInstance.destroy(); itsConcluidasChartInstance = null;
+                 updateChartGoalIndicator('itsConcluidasStatusIndicator', null);
+                 return;
+            }
+            let itsAcumuladasReal = 0;
+            const dadosReaisAcumulados = mesesDoPeriodo.map(mesAno => {
+                const itsNesteMes = dadosParaGrafico.filter(it => it.mesAnoConclusao === mesAno).length;
+                itsAcumuladasReal += itsNesteMes;
+                return itsAcumuladasReal;
+            });
+            const dadosMetaAcumulada = getDadosMetaAcumulada(mesesDoPeriodo, filtroColaborador, 'metaIts');
+            let isGoalMet = null;
+            if (dadosReaisAcumulados.length > 0 && dadosMetaAcumulada.length > 0) {
+                const latestReal = dadosReaisAcumulados[dadosReaisAcumulados.length - 1];
+                const latestMeta = dadosMetaAcumulada[dadosMetaAcumulada.length - 1];
+                if (latestMeta > 0) {
+                   isGoalMet = latestReal >= latestMeta;
+                }
+            }
+            updateChartGoalIndicator('itsConcluidasStatusIndicator', isGoalMet);
+            const labelsGrafico = mesesDoPeriodo.map(formatMonthYear);
+            if (itsConcluidasChartInstance) itsConcluidasChartInstance.destroy();
+            itsConcluidasChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [
+                        { label: 'ITs Acumuladas (Real)', data: dadosReaisAcumulados, borderColor: 'rgb(139, 92, 246)', backgroundColor: 'rgba(139, 92, 246, 0.5)', tension: 0.1, fill: false },
+                        { label: 'Meta Acumulada (Esperado)', data: dadosMetaAcumulada, borderColor: 'rgba(255, 0, 0, 0.7)', borderDash: [5, 5], fill: false, pointRadius: 0, tension: 0.1 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, suggestedMax: Math.max(...dadosReaisAcumulados, ...dadosMetaAcumulada) + 2 } }, plugins: { legend: { display: true, position: 'top' }, title: { display: false }, tooltip: { mode: 'index', intersect: false } } }
+            });
+        }
+        function renderSapsImplementadasChart() {
+            const ctx = document.getElementById('sapsImplementadasChart')?.getContext('2d');
+            if (!ctx) {
+                updateChartGoalIndicator('sapsImplementadasStatusIndicator', null);
+                return;
+            }
+            const filtroColaborador = document.getElementById('filtroColaboradorSapChart').value;
+            const filtroAno = document.getElementById('filtroAnoSapChart').value;
+            let dadosParaGrafico = todasSapsImplementadas;
+            if (filtroColaborador !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(sap => sap.colaboradorNome === filtroColaborador);
+            }
+             if (filtroAno !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(sap => sap.mesAnoConclusao?.startsWith(filtroAno));
+            }
+            const realMonths = dadosParaGrafico.map(sap => sap.mesAnoConclusao).filter(Boolean);
+            const metaMonths = todasMetas
+                .filter(m => {
+                    const colabOk = filtroColaborador === 'todos' || m.colaboradorNome === filtroColaborador;
+                    const anoOk = filtroAno === 'todos' || m.mesAno.startsWith(filtroAno);
+                    return colabOk && anoOk && m.metaSaps != null;
+                })
+                .map(m => m.mesAno);
+            let mesesDoPeriodo = [...new Set([...realMonths, ...metaMonths])].sort();
+            if (filtroAno !== 'todos') {
+                mesesDoPeriodo = mesesDoPeriodo.filter(m => m.startsWith(filtroAno));
+            }
+            if (mesesDoPeriodo.length === 0) {
+                 if (sapsImplementadasChartInstance) sapsImplementadasChartInstance.destroy(); sapsImplementadasChartInstance = null;
+                 updateChartGoalIndicator('sapsImplementadasStatusIndicator', null);
+                 return;
+            }
+            let sapsAcumuladasReal = 0;
+            const dadosReaisAcumulados = mesesDoPeriodo.map(mesAno => {
+                sapsAcumuladasReal += dadosParaGrafico.filter(sap => sap.mesAnoConclusao === mesAno).length;
+                return sapsAcumuladasReal;
+            });
+            const dadosMetaAcumulada = getDadosMetaAcumulada(mesesDoPeriodo, filtroColaborador, 'metaSaps');
+            let isGoalMet = null;
+            if (dadosReaisAcumulados.length > 0 && dadosMetaAcumulada.length > 0) {
+                const latestReal = dadosReaisAcumulados[dadosReaisAcumulados.length - 1];
+                const latestMeta = dadosMetaAcumulada[dadosMetaAcumulada.length - 1];
+                if (latestMeta > 0) {
+                   isGoalMet = latestReal >= latestMeta;
+                }
+            }
+            updateChartGoalIndicator('sapsImplementadasStatusIndicator', isGoalMet);
+            const labelsGrafico = mesesDoPeriodo.map(formatMonthYear);
+            if (sapsImplementadasChartInstance) sapsImplementadasChartInstance.destroy();
+            sapsImplementadasChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [
+                        { label: 'SAPs Acumuladas (Real)', data: dadosReaisAcumulados, borderColor: 'rgb(34, 197, 94)', backgroundColor: 'rgba(34, 197, 94, 0.5)', tension: 0.1, fill: false },
+                        { label: 'Meta Acumulada (Esperado)', data: dadosMetaAcumulada, borderColor: 'rgba(255, 0, 0, 0.7)', borderDash: [5, 5], fill: false, pointRadius: 0, tension: 0.1 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, suggestedMax: Math.max(...dadosReaisAcumulados, ...dadosMetaAcumulada) + 2 } }, plugins: { legend: { display: true, position: 'top' }, title: { display: false }, tooltip: { mode: 'index', intersect: false } } }
+            });
+        }
+        function renderAvaliacoesPostoTrabalhoChart() {
+            const ctx = document.getElementById('avaliacoesPostoTrabalhoChart')?.getContext('2d');
+            if (!ctx) {
+                updateChartGoalIndicator('avaliacoesPostoStatusIndicator', null);
+                return;
+            }
+            const filtroColaborador = document.getElementById('filtroColaboradorAvaliacaoPostoChart').value;
+            const filtroAno = document.getElementById('filtroAnoAvaliacaoPostoChart').value;
+            let dadosParaGrafico = todasAvaliacoesPostoTrabalho;
+            if (filtroColaborador !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(av => av.colaboradorNome === filtroColaborador);
+            }
+            if (filtroAno !== 'todos') {
+                dadosParaGrafico = dadosParaGrafico.filter(av => av.mesAnoAvaliacao?.startsWith(filtroAno));
+            }
+            const realMonths = dadosParaGrafico.map(av => av.mesAnoAvaliacao).filter(Boolean);
+            const metaMonths = todasMetas
+                .filter(m => {
+                    const colabOk = filtroColaborador === 'todos' || m.colaboradorNome === filtroColaborador;
+                    const anoOk = filtroAno === 'todos' || m.mesAno.startsWith(filtroAno);
+                    return colabOk && anoOk && m.metaAvaliacoesPosto != null;
+                })
+                .map(m => m.mesAno);
+            let mesesDoPeriodo = [...new Set([...realMonths, ...metaMonths])].sort();
+            if (filtroAno !== 'todos') {
+                mesesDoPeriodo = mesesDoPeriodo.filter(m => m.startsWith(filtroAno));
+            }
+            if (mesesDoPeriodo.length === 0) {
+                if (avaliacoesPostoTrabalhoChartInstance) avaliacoesPostoTrabalhoChartInstance.destroy(); avaliacoesPostoTrabalhoChartInstance = null;
+                updateChartGoalIndicator('avaliacoesPostoStatusIndicator', null);
+                return;
+            }
+            let avaliacoesAcumuladasReal = 0;
+            const dadosReaisAcumulados = mesesDoPeriodo.map(mesAno => {
+                avaliacoesAcumuladasReal += dadosParaGrafico.filter(av => av.mesAnoAvaliacao === mesAno).length;
+                return avaliacoesAcumuladasReal;
+            });
+            const dadosMetaAcumulada = getDadosMetaAcumulada(mesesDoPeriodo, filtroColaborador, 'metaAvaliacoesPosto');
+            let isGoalMet = null;
+            if (dadosReaisAcumulados.length > 0 && dadosMetaAcumulada.length > 0) {
+                const latestReal = dadosReaisAcumulados[dadosReaisAcumulados.length - 1];
+                const latestMeta = dadosMetaAcumulada[dadosMetaAcumulada.length - 1];
+                if (latestMeta > 0) {
+                    isGoalMet = latestReal >= latestMeta;
+                }
+            }
+            updateChartGoalIndicator('avaliacoesPostoStatusIndicator', isGoalMet);
+            const labelsGrafico = mesesDoPeriodo.map(formatMonthYear);
+            if (avaliacoesPostoTrabalhoChartInstance) avaliacoesPostoTrabalhoChartInstance.destroy();
+            avaliacoesPostoTrabalhoChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsGrafico,
+                    datasets: [
+                        { label: 'Avaliações Acumuladas (Real)', data: dadosReaisAcumulados, borderColor: 'rgb(79, 70, 229)', backgroundColor: 'rgba(79, 70, 229, 0.5)', tension: 0.1, fill: false },
+                        { label: 'Meta Acumulada (Esperado)', data: dadosMetaAcumulada, borderColor: 'rgba(255, 0, 0, 0.7)', borderDash: [5, 5], fill: false, pointRadius: 0, tension: 0.1 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, suggestedMax: Math.max(...dadosReaisAcumulados, ...dadosMetaAcumulada) + 2 } }, plugins: { legend: { display: true, position: 'top' }, title: { display: false }, tooltip: { mode: 'index', intersect: false } }
+                }
+            });
+        }
+        document.getElementById('filtroColaboradorGrafico').addEventListener('change', updateAllDashboardCharts);
+        document.getElementById('filtroSetor5sChart').addEventListener('change', renderAvaliacao5sChart);
+        document.getElementById('filtroMaquinaTpmChart').addEventListener('change', renderAvaliacaoTpmChart);
+        document.getElementById('filtroColaboradorItChart').addEventListener('change', renderItsConcluidasChart);
+        document.getElementById('filtroAnoItChart').addEventListener('change', renderItsConcluidasChart);
+        document.getElementById('filtroColaboradorSapChart').addEventListener('change', renderSapsImplementadasChart);
+        document.getElementById('filtroAnoSapChart').addEventListener('change', renderSapsImplementadasChart);
+        document.getElementById('filtroColaboradorAvaliacaoPostoChart').addEventListener('change', renderAvaliacoesPostoTrabalhoChart);
+        document.getElementById('filtroAnoAvaliacaoPostoChart').addEventListener('change', renderAvaliacoesPostoTrabalhoChart);
+    </script>
+</body>
+</html>
